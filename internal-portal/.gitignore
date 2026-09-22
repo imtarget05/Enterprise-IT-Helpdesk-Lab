@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Dữ liệu runtime (tự sinh từ src/seed.js ở lần chạy đầu)
+data/*.json
+data/*.log
+data/*.corrupt-*
+!data/.gitkeep
+
+# Báo cáo xuất thử nghiệm
+exports/
+*.csv
+
+# Log hệ thống
+npm-debug.log*
+logs/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Biến môi trường local (webhook thật, ...)
+.env
+.env.local

@@ -62,34 +62,57 @@
         <div class="metrics-grid">
           <div class="metric-card">
             <span class="metric-label">Tổng Thiết Bị IT</span>
-            <h2 id="stat-total-assets">0</h2>
+            <h2 id="stat-total-assets" class="count-up">0</h2>
             <span class="metric-sub text-green">Đang theo dõi trong mạng</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">Thiết Bị Đang Cấp Phát</span>
-            <h2 id="stat-active-assets">0</h2>
-            <span class="metric-sub text-blue">Sử dụng tại văn phòng & chi nhánh</span>
+            <h2 id="stat-active-assets" class="count-up">0</h2>
+            <span class="metric-sub text-blue"><span id="stat-storage-assets">0</span> thiết bị chờ trong kho</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">Ticket Đang Mở (Open)</span>
-            <h2 id="stat-open-tickets">0</h2>
-            <span class="metric-sub text-orange">Cần xử lý trong ngày</span>
+            <h2 id="stat-open-tickets" class="count-up">0</h2>
+            <span class="metric-sub text-orange"><span id="stat-critical-alerts">0</span> ticket khẩn cấp chưa xử lý</span>
           </div>
           <div class="metric-card">
             <span class="metric-label">Ticket Đã Giải Quyết</span>
-            <h2 id="stat-resolved-tickets">0</h2>
-            <span class="metric-sub text-green">Tuân thủ SLA 98.5%</span>
+            <h2 id="stat-resolved-tickets" class="count-up">0</h2>
+            <span class="metric-sub text-green">Tuân thủ SLA <strong id="stat-sla">—</strong></span>
           </div>
         </div>
 
         <div class="content-split">
           <div class="card">
-            <h3>Sự Cố Mới Nhất</h3>
+            <div class="card-head">
+              <h3>Sự Cố Mới Nhất</h3>
+              <button class="link-btn" data-goto="tab-tickets">Xem tất cả →</button>
+            </div>
             <div id="recent-tickets-list" class="recent-list"></div>
           </div>
           <div class="card">
-            <h3>Thiết Bị Cần Bảo Trì & Thu Hồi</h3>
+            <div class="card-head">
+              <h3>Thiết Bị Cần Bảo Trì &amp; Thu Hồi</h3>
+              <button class="link-btn" data-goto="tab-assets">Xem kho →</button>
+            </div>
             <div id="storage-assets-list" class="recent-list"></div>
+          </div>
+        </div>
+
+        <div class="content-split">
+          <div class="card">
+            <div class="card-head">
+              <h3>Cơ Cấu Tài Sản Theo Loại</h3>
+              <span class="card-hint">Bấm vào loại để lọc nhanh</span>
+            </div>
+            <div id="assets-by-type" class="bar-chart"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Cảnh Báo Tự Động (Webhook Mock)</h3>
+              <span class="card-hint">Ticket High / Critical</span>
+            </div>
+            <div id="alert-feed" class="recent-list compact"></div>
           </div>
         </div>
       </section>
@@ -97,22 +120,48 @@
       <!-- TAB 2: IT ASSETS -->
       <section id="tab-assets" class="tab-pane">
         <div class="section-toolbar">
-          <input type="text" id="asset-search" placeholder="🔍 Tìm theo mã tài sản, người dùng, model..." class="search-input">
-          <button class="btn btn-primary" id="btn-add-asset">+ Thêm Thiết Bị Mới</button>
+          <input type="text" id="asset-search" placeholder="🔍 Tìm theo mã tài sản, người dùng, model, serial, IP..." class="search-input" aria-label="Tìm kiếm thiết bị">
+          <select id="asset-filter-type" class="filter-select" aria-label="Lọc theo loại thiết bị">
+            <option value="">Tất cả loại</option>
+            <option value="Laptop">Laptop</option>
+            <option value="Desktop PC">Desktop PC</option>
+            <option value="Printer">Máy In</option>
+            <option value="Network Switch">Switch / Router</option>
+          </select>
+          <select id="asset-filter-status" class="filter-select" aria-label="Lọc theo trạng thái">
+            <option value="">Tất cả trạng thái</option>
+            <option value="Active">Đang sử dụng</option>
+            <option value="In Storage">Trong kho</option>
+            <option value="Maintenance">Bảo trì</option>
+            <option value="Retired">Thanh lý</option>
+          </select>
+          <div class="toolbar-actions">
+            <button class="btn btn-export" id="btn-export-assets" title="Tải file kiểm kê .csv theo bộ lọc đang chọn">
+              <span class="btn-icon">📑</span> Xuất Danh Sách Tài Sản (CSV)
+            </button>
+            <button class="btn btn-secondary" id="btn-refresh-assets" title="Tải lại dữ liệu từ server">↻</button>
+            <button class="btn btn-primary" id="btn-add-asset">+ Thêm Thiết Bị Mới</button>
+          </div>
         </div>
+
+        <div class="list-meta">
+          <span id="assets-count">Đang tải dữ liệu...</span>
+          <button class="link-btn" id="btn-clear-asset-filters" hidden>Xóa bộ lọc</button>
+        </div>
+
         <div class="table-container">
-          <table class="data-table">
+          <table class="data-table" id="assets-table">
             <thead>
               <tr>
-                <th>Mã Tài Sản</th>
-                <th>Loại</th>
-                <th>Thương Hiệu / Model</th>
-                <th>Serial Number</th>
-                <th>Người Sử Dụng</th>
-                <th>Phòng Ban</th>
-                <th>Trạng Thái</th>
-                <th>IP Gán</th>
-                <th>Thao Tác</th>
+                <th class="sortable" data-sort="tag" scope="col">Mã Tài Sản</th>
+                <th class="sortable" data-sort="type" scope="col">Loại</th>
+                <th class="sortable" data-sort="brand" scope="col">Thương Hiệu / Model</th>
+                <th scope="col">Serial Number</th>
+                <th class="sortable" data-sort="assignedTo" scope="col">Người Sử Dụng</th>
+                <th class="sortable" data-sort="dept" scope="col">Phòng Ban</th>
+                <th class="sortable" data-sort="status" scope="col">Trạng Thái</th>
+                <th scope="col">IP Gán</th>
+                <th scope="col">Thao Tác</th>
               </tr>
             </thead>
             <tbody id="assets-tbody"></tbody>
@@ -123,22 +172,47 @@
       <!-- TAB 3: TICKETS -->
       <section id="tab-tickets" class="tab-pane">
         <div class="section-toolbar">
-          <input type="text" id="ticket-search" placeholder="🔍 Tìm theo nội dung ticket, người yêu cầu..." class="search-input">
-          <button class="btn btn-primary" id="btn-add-ticket">+ Tạo Ticket Mới</button>
+          <input type="text" id="ticket-search" placeholder="🔍 Tìm theo nội dung ticket, người yêu cầu, danh mục..." class="search-input" aria-label="Tìm kiếm ticket">
+          <select id="ticket-filter-status" class="filter-select" aria-label="Lọc ticket theo trạng thái">
+            <option value="">Tất cả trạng thái</option>
+            <option value="Open">Mới (Open)</option>
+            <option value="In Progress">Đang xử lý</option>
+            <option value="Resolved">Đã giải quyết</option>
+            <option value="Closed">Đã đóng</option>
+          </select>
+          <select id="ticket-filter-priority" class="filter-select" aria-label="Lọc ticket theo mức độ">
+            <option value="">Tất cả mức độ</option>
+            <option value="Critical">Critical</option>
+            <option value="High">High</option>
+            <option value="Medium">Medium</option>
+            <option value="Low">Low</option>
+          </select>
+          <div class="toolbar-actions">
+            <button class="btn btn-export" id="btn-export-tickets" title="Tải báo cáo ticket .csv">
+              <span class="btn-icon">📑</span> Xuất Báo Cáo Ticket (CSV)
+            </button>
+            <button class="btn btn-primary" id="btn-add-ticket">+ Tạo Ticket Mới</button>
+          </div>
         </div>
+
+        <div class="list-meta">
+          <span id="tickets-count">Đang tải dữ liệu...</span>
+          <button class="link-btn" id="btn-clear-ticket-filters" hidden>Xóa bộ lọc</button>
+        </div>
+
         <div class="table-container">
-          <table class="data-table">
+          <table class="data-table" id="tickets-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Tiêu Đề Yêu Cầu</th>
-                <th>Người Báo</th>
-                <th>Phòng Ban</th>
-                <th>Mức Độ</th>
-                <th>Danh Mục</th>
-                <th>Thời Gian</th>
-                <th>Trạng Thái</th>
-                <th>Hành Động</th>
+                <th class="sortable" data-sort="id" scope="col">ID</th>
+                <th class="sortable" data-sort="title" scope="col">Tiêu Đề Yêu Cầu</th>
+                <th class="sortable" data-sort="requester" scope="col">Người Báo</th>
+                <th scope="col">Phòng Ban</th>
+                <th class="sortable" data-sort="priority" scope="col">Mức Độ</th>
+                <th scope="col">Danh Mục</th>
+                <th class="sortable" data-sort="createdAt" scope="col">Thời Gian</th>
+                <th class="sortable" data-sort="status" scope="col">Trạng Thái</th>
+                <th scope="col">Hành Động</th>
               </tr>
             </thead>
             <tbody id="tickets-tbody"></tbody>
@@ -148,16 +222,19 @@
 
       <!-- TAB 4: LICENSES -->
       <section id="tab-licenses" class="tab-pane">
+        <div class="list-meta">
+          <span id="licenses-meta">Đang tải dữ liệu bản quyền...</span>
+        </div>
         <div class="table-container">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Phần Mềm / License</th>
-                <th>Tổng Bản Quyền Mua</th>
-                <th>Đã Cấp Phát</th>
-                <th>Còn Khả Dụng</th>
-                <th>Tỷ Lệ Sử Dụng</th>
-                <th>Hạn Tái Tục (Renewal)</th>
+                <th scope="col">Phần Mềm / License</th>
+                <th scope="col">Tổng Bản Quyền Mua</th>
+                <th scope="col">Đã Cấp Phát</th>
+                <th scope="col">Còn Khả Dụng</th>
+                <th scope="col">Tỷ Lệ Sử Dụng</th>
+                <th scope="col">Hạn Tái Tục (Renewal)</th>
               </tr>
             </thead>
             <tbody id="licenses-tbody"></tbody>
@@ -166,6 +243,14 @@
       </section>
     </main>
   </div>
+
+  <!-- Cảnh báo mất kết nối API (server chưa lên / Docker container đang restart) -->
+  <div id="offline-banner" class="offline-banner" hidden>
+    ⚠️ Không kết nối được máy chủ API. <button class="link-btn" id="btn-retry-connection">Thử lại</button>
+  </div>
+
+  <!-- Toast notifications: phản hồi mọi thao tác + lỗi API -->
+  <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <!-- Modal Tạo Thiết Bị -->
   <div id="asset-modal" class="modal">
@@ -211,6 +296,22 @@
             <input type="text" id="m-dept" placeholder="Kế toán / Nhân sự / IT">
           </div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Trạng Thái</label>
+            <select id="m-status">
+              <option value="Active" selected>Đang sử dụng (Active)</option>
+              <option value="In Storage">Lưu kho IT (In Storage)</option>
+              <option value="Maintenance">Đang bảo trì (Maintenance)</option>
+              <option value="Retired">Đã thanh lý (Retired)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Địa Chỉ IP</label>
+            <input type="text" id="m-ip" placeholder="192.168.10.x (bỏ trống nếu chưa gán)">
+          </div>
+        </div>
+        <p class="form-hint">💾 Dữ liệu được lưu bền vững vào <code>data/db.json</code> — không mất khi khởi động lại server.</p>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" id="btn-close-asset-modal">Hủy</button>
           <button type="submit" class="btn btn-primary">Lưu Thiết Bị</button>
@@ -244,16 +345,21 @@
             <select id="t-priority">
               <option value="Low">Low (Thấp)</option>
               <option value="Medium" selected>Medium (Trung Bình)</option>
-              <option value="High">High (Khẩn Cấp)</option>
+              <option value="High">High (Khẩn Cấp — alert tự động)</option>
+              <option value="Critical">Critical (Sự cố diện rộng — alert tự động)</option>
             </select>
           </div>
           <div class="form-group">
             <label>Phân Loại Sự Cố</label>
             <select id="t-category">
               <option value="Network">Mạng / Internet / Wi-Fi</option>
+              <option value="DNS">DNS / Name Resolution</option>
               <option value="Active Directory">Tài Khoản Domain / Mật Khẩu</option>
+              <option value="File Server">File Server / Chia sẻ \\\\FS01</option>
               <option value="Hardware">Phần Cứng / Máy Tính / Máy In</option>
+              <option value="Hardware Request">Yêu cầu cấp phát thiết bị</option>
               <option value="Software">Phần Mềm / Office 365 / Mail</option>
+              <option value="Security">Bảo mật / Antivirus / VPN</option>
             </select>
           </div>
         </div>

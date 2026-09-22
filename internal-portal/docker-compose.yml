@@ -1,0 +1,41 @@
+# =============================================================================
+#  BMC IT PORTAL — Docker Compose
+#  Khởi động toàn bộ portal bằng 1 lệnh:  docker compose up -d
+#  Xem log:                    docker compose logs -f it-portal
+#  Dừng (giữ dữ liệu):         docker compose down
+# =============================================================================
+services:
+  it-portal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bmc/it-asset-helpdesk-portal:2.0.0
+    container_name: it-portal
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATA_DIR: /app/data
+      # Tuỳ chọn: dán webhook Slack/Teams/Mattermost để nhận ticket High/Critical.
+      # Bỏ trống → module notification chạy ở chế độ mock (console + data/notifications.log).
+      IT_WEBHOOK_URL: ${IT_WEBHOOK_URL:-}
+    volumes:
+      # Dữ liệu bền vững: db.json + notifications.log nằm ngoài container.
+      - ./data:/app/data
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - it-network
+    labels:
+      app.kubernetes.io/name: it-asset-helpdesk-portal
+      app.kubernetes.io/part-of: bmc-enterprise-it-lab
+
+networks:
+  it-network:
+    driver: bridge

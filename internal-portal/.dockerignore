@@ -1,0 +1,17 @@
+# Không đưa vào build context → build nhanh hơn + không lộ dữ liệu/nhật ký
+node_modules
+npm-debug.log*
+data
+*.log
+.DS_Store
+.git
+.gitignore
+.env
+.env.*
+docker-compose.yml
+Dockerfile
+.dockerignore
+test
+test-api.sh
+README.md
+docs

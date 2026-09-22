@@ -1,13 +1,32 @@
 {
   "name": "enterprise-it-asset-portal",
-  "version": "1.0.0",
-  "description": "Internal IT Asset Management & Helpdesk Ticketing Portal for BMC Vietnam",
+  "version": "2.0.0",
+  "description": "Internal IT Asset Management & Helpdesk Ticketing Portal for BMC Vietnam — JSON-file persistence, CSV audit export, Docker-ready, full REST test suite",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
   },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test \"test/*.test.js\"",
+    "test:api": "bash ./test-api.sh",
+    "test:watch": "node --test --watch \"test/*.test.js\""
+  },
+  "keywords": [
+    "it-helpdesk",
+    "it-asset-management",
+    "itil",
+    "express",
+    "dashboard",
+    "bmc-vietnam"
+  ],
+  "author": "Mai Nguyen Binh Tan",
+  "license": "MIT",
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
   }
 }
+
