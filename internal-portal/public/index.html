@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BMC Vietnam — IT Asset & Helpdesk Management Portal</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo-icon">🏢</div>
+        <div class="brand-text">
+          <h2>BMC IT PORTAL</h2>
+          <span>Enterprise Management</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="tab-dashboard">
+          <span class="icon">📊</span> Dashboard
+        </button>
+        <button class="nav-item" data-tab="tab-assets">
+          <span class="icon">💻</span> IT Assets (Thiết Bị)
+        </button>
+        <button class="nav-item" data-tab="tab-tickets">
+          <span class="icon">🎫</span> Helpdesk Tickets
+        </button>
+        <button class="nav-item" data-tab="tab-licenses">
+          <span class="icon">🔑</span> Software Licenses
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="avatar">TM</div>
+          <div class="details">
+            <strong>Mai Nguyen Binh Tan</strong>
+            <span>Internal IT Specialist</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="top-header">
+        <h1 id="page-title">Hệ Thống Quản Lý Tài Sản & Hỗ Trợ Kỹ Thuật IT</h1>
+        <div class="header-actions">
+          <span class="status-indicator live"></span>
+          <span class="system-time" id="clock">Online</span>
+        </div>
+      </header>
+
+      <!-- TAB 1: DASHBOARD -->
+      <section id="tab-dashboard" class="tab-pane active">
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-label">Tổng Thiết Bị IT</span>
+            <h2 id="stat-total-assets">0</h2>
+            <span class="metric-sub text-green">Đang theo dõi trong mạng</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Thiết Bị Đang Cấp Phát</span>
+            <h2 id="stat-active-assets">0</h2>
+            <span class="metric-sub text-blue">Sử dụng tại văn phòng & chi nhánh</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Ticket Đang Mở (Open)</span>
+            <h2 id="stat-open-tickets">0</h2>
+            <span class="metric-sub text-orange">Cần xử lý trong ngày</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Ticket Đã Giải Quyết</span>
+            <h2 id="stat-resolved-tickets">0</h2>
+            <span class="metric-sub text-green">Tuân thủ SLA 98.5%</span>
+          </div>
+        </div>
+
+        <div class="content-split">
+          <div class="card">
+            <h3>Sự Cố Mới Nhất</h3>
+            <div id="recent-tickets-list" class="recent-list"></div>
+          </div>
+          <div class="card">
+            <h3>Thiết Bị Cần Bảo Trì & Thu Hồi</h3>
+            <div id="storage-assets-list" class="recent-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: IT ASSETS -->
+      <section id="tab-assets" class="tab-pane">
+        <div class="section-toolbar">
+          <input type="text" id="asset-search" placeholder="🔍 Tìm theo mã tài sản, người dùng, model..." class="search-input">
+          <button class="btn btn-primary" id="btn-add-asset">+ Thêm Thiết Bị Mới</button>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Mã Tài Sản</th>
+                <th>Loại</th>
+                <th>Thương Hiệu / Model</th>
+                <th>Serial Number</th>
+                <th>Người Sử Dụng</th>
+                <th>Phòng Ban</th>
+                <th>Trạng Thái</th>
+                <th>IP Gán</th>
+                <th>Thao Tác</th>
+              </tr>
+            </thead>
+            <tbody id="assets-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 3: TICKETS -->
+      <section id="tab-tickets" class="tab-pane">
+        <div class="section-toolbar">
+          <input type="text" id="ticket-search" placeholder="🔍 Tìm theo nội dung ticket, người yêu cầu..." class="search-input">
+          <button class="btn btn-primary" id="btn-add-ticket">+ Tạo Ticket Mới</button>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Tiêu Đề Yêu Cầu</th>
+                <th>Người Báo</th>
+                <th>Phòng Ban</th>
+                <th>Mức Độ</th>
+                <th>Danh Mục</th>
+                <th>Thời Gian</th>
+                <th>Trạng Thái</th>
+                <th>Hành Động</th>
+              </tr>
+            </thead>
+            <tbody id="tickets-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 4: LICENSES -->
+      <section id="tab-licenses" class="tab-pane">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Phần Mềm / License</th>
+                <th>Tổng Bản Quyền Mua</th>
+                <th>Đã Cấp Phát</th>
+                <th>Còn Khả Dụng</th>
+                <th>Tỷ Lệ Sử Dụng</th>
+                <th>Hạn Tái Tục (Renewal)</th>
+              </tr>
+            </thead>
+            <tbody id="licenses-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal Tạo Thiết Bị -->
+  <div id="asset-modal" class="modal">
+    <div class="modal-content">
+      <h3>Đăng Ký Tài Sản Thiết Bị CNTT Mới</h3>
+      <form id="asset-form">
+        <div class="form-group">
+          <label>Mã Tài Sản (Asset Tag)*</label>
+          <input type="text" id="m-tag" required placeholder="Ví dụ: LP-ACC-015">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Loại Thiết Bị</label>
+            <select id="m-type">
+              <option value="Laptop">Laptop</option>
+              <option value="Desktop PC">Desktop PC</option>
+              <option value="Printer">Máy In (Printer)</option>
+              <option value="Network Switch">Switch / Router</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Hãng Sản Xuất</label>
+            <input type="text" id="m-brand" required placeholder="Dell / Lenovo / HP">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Model Máy</label>
+            <input type="text" id="m-model" required placeholder="Latitude 5420">
+          </div>
+          <div class="form-group">
+            <label>Số Serial</label>
+            <input type="text" id="m-serial" required placeholder="Serial Number">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Người Cấp Phát</label>
+            <input type="text" id="m-user" placeholder="Họ tên nhân viên">
+          </div>
+          <div class="form-group">
+            <label>Phòng Ban</label>
+            <input type="text" id="m-dept" placeholder="Kế toán / Nhân sự / IT">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="btn-close-asset-modal">Hủy</button>
+          <button type="submit" class="btn btn-primary">Lưu Thiết Bị</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Tạo Ticket -->
+  <div id="ticket-modal" class="modal">
+    <div class="modal-content">
+      <h3>Tạo Phiếu Hỗ Trợ Kỹ Thuật (Helpdesk Ticket)</h3>
+      <form id="ticket-form">
+        <div class="form-group">
+          <label>Tiêu Đề Sự Cố / Yêu Cầu*</label>
+          <input type="text" id="t-title" required placeholder="Mô tả ngắn gọn sự cố">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Người Gửi Yêu Cầu</label>
+            <input type="text" id="t-requester" required placeholder="Họ và tên">
+          </div>
+          <div class="form-group">
+            <label>Phòng Ban</label>
+            <input type="text" id="t-dept" required placeholder="Kế toán / Kinh doanh">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Mức Độ Ưu Tiên</label>
+            <select id="t-priority">
+              <option value="Low">Low (Thấp)</option>
+              <option value="Medium" selected>Medium (Trung Bình)</option>
+              <option value="High">High (Khẩn Cấp)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Phân Loại Sự Cố</label>
+            <select id="t-category">
+              <option value="Network">Mạng / Internet / Wi-Fi</option>
+              <option value="Active Directory">Tài Khoản Domain / Mật Khẩu</option>
+              <option value="Hardware">Phần Cứng / Máy Tính / Máy In</option>
+              <option value="Software">Phần Mềm / Office 365 / Mail</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="btn-close-ticket-modal">Hủy</button>
+          <button type="submit" class="btn btn-primary">Tạo Ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

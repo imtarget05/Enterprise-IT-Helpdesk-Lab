@@ -1,0 +1,24 @@
+# === AI agent tool state (GIU LAI TREN DIA, khong commit) ===
+.kilo/
+
+# === OS / editor ===
+.DS_Store
+.localized
+*.swp
+
+# === .NET build output ===
+bin/
+obj/
+*.user
+
+# === Node ===
+node_modules/
+
+# === secrets & local overrides ===
+.env
+.env.*
+!.env.example
+*credentials*.json
+
+# === Oracle data (khong bao gio commit) ===
+**/oradata/
