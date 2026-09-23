@@ -1,0 +1,1017 @@
+openapi: 3.1.0
+info:
+  title: IT Asset & Helpdesk Portal API
+  summary: REST API quản lý tài sản CNTT, ticket ITIL và bản quyền phần mềm
+  version: 2.0.0
+  description: |
+    API nội bộ của **IT Asset & Helpdesk Portal** (BMC Vietnam — Enterprise IT Lab).
+
+    **Đặc điểm thiết kế:**
+    - Không cần database ngoài: dữ liệu lưu trong `data/db.json` bằng cơ chế ghi
+      **atomic (ghi file tạm rồi `rename`)** + tự phục hồi khi file JSON hỏng.
+    - Mọi mutation `await store.commit()` **trước khi** trả 200/201 → restart
+      container/server không mất dữ liệu.
+    - Báo cáo CSV dùng chuẩn RFC-4180 + **UTF-8 BOM** để mở trực tiếp bằng Excel
+      mà không lỗi font tiếng Việt.
+    - Mã lỗi theo hợp đồng: `400` thiếu/sai dữ liệu, `404` không tồn tại,
+      `405` sai method (kèm header `Allow`), `409` trùng Asset Tag/Serial,
+      `422` giá trị enum không hợp lệ.
+
+    File này được phục vụ tĩnh tại `/openapi.yaml`. Dán vào <https://editor.swagger.io>
+    để xem dạng tài liệu tương tác.
+  contact:
+    name: Mai Nguyen Binh Tan
+    url: https://github.com/imtarget05
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local — `npm start` hoặc `docker compose up -d --wait`
+  - url: http://it-portal:3000
+    description: Trong mạng Docker Compose (gọi giữa các container)
+
+tags:
+  - name: Health
+    description: Kiểm tra tình trạng dịch vụ (dùng cho HEALTHCHECK của Docker)
+  - name: Dashboard
+    description: Số liệu tổng hợp cho màn hình Dashboard
+  - name: Assets
+    description: Vòng đời tài sản CNTT (đăng ký, cấp phát, thu hồi, thanh lý)
+  - name: Tickets
+    description: Ticket hỗ trợ theo vòng đời ITIL
+  - name: Licenses
+    description: Bản quyền phần mềm và mức sử dụng
+  - name: Notifications
+    description: Lịch sử cảnh báo tự động (webhook/mock)
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Tình trạng dịch vụ
+      operationId: getHealth
+      responses:
+        '200':
+          description: Dịch vụ đang chạy bình thường
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                status: ok
+                uptime: 42.18
+                timestamp: '2026-09-23 14:10'
+                storage: json-file
+                dataDir: /app/data
+                seeded: false
+                service: enterprise-it-asset-portal
+                version: 2.0.0
+                host: it-portal
+                counts:
+                  assets: 6
+                  tickets: 6
+                  licenses: 4
+                webhook: mock
+
+  /api/dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: KPI tổng hợp cho Dashboard
+      operationId: getDashboardStats
+      responses:
+        '200':
+          description: Số liệu KPI, bao gồm tỷ lệ SLA và cảnh báo bản quyền
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+              example:
+                totalAssets: 6
+                activeAssets: 5
+                storageAssets: 1
+                maintenanceAssets: 0
+                retiredAssets: 0
+                openTickets: 1
+                resolvedTickets: 5
+                closedTickets: 0
+                criticalAlerts: 0
+                slaPercent: 83.3
+                assetsByType:
+                  Laptop: 3
+                  Desktop PC: 1
+                  Printer: 1
+                  Network Switch: 1
+                licenseTotal: 245
+                licenseAssigned: 217
+                licenseAlerts: 1
+                generatedAt: '2026-09-23 14:10'
+
+
+  /api/assets:
+    get:
+      tags: [Assets]
+      summary: Danh sách tài sản (kèm bộ lọc)
+      operationId: listAssets
+      parameters:
+        - $ref: '#/components/parameters/QuerySearch'
+        - $ref: '#/components/parameters/FilterStatusAsset'
+        - $ref: '#/components/parameters/FilterType'
+      responses:
+        '200':
+          description: Mảng tài sản khớp bộ lọc (mảng rỗng nếu không có kết quả)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+    post:
+      tags: [Assets]
+      summary: Đăng ký tài sản mới
+      operationId: createAsset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetInput'
+            example:
+              tag: LP-SALES-021
+              type: Laptop
+              brand: Dell
+              model: Latitude 5450
+              serial: 9PLK21X
+              assignedTo: Le Hoang Nam
+              dept: Sales
+              status: Active
+              ip: 192.168.10.131
+      responses:
+        '201':
+          description: Đã tạo tài sản (id do server sinh)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /api/assets/export.csv:
+    get:
+      tags: [Assets]
+      summary: Xuất báo cáo kiểm kê tài sản ra CSV (tôn trọng bộ lọc)
+      operationId: exportAssetsCsv
+      parameters:
+        - $ref: '#/components/parameters/QuerySearch'
+        - $ref: '#/components/parameters/FilterStatusAsset'
+        - $ref: '#/components/parameters/FilterType'
+      responses:
+        '200':
+          description: |
+            File CSV RFC-4180 + UTF-8 BOM. Tên file dạng
+            `IT-Asset-Audit_YYYYMMDD_HHmm.csv`; số bản ghi nằm ở header `X-Total-Records`.
+          headers:
+            Content-Disposition:
+              description: Tên file tải về
+              schema:
+                type: string
+                example: attachment; filename="IT-Asset-Audit_20260923_1410.csv"
+            X-Total-Records:
+              description: Số bản ghi trong file
+              schema:
+                type: integer
+                example: 6
+          content:
+            text/csv:
+              schema:
+                type: string
+              example: |
+                "Asset Tag (Mã tài sản)","Type (Loại)","Brand (Hãng)","Model","Serial","Assigned To","Department","Status","IP Address"
+                "LP-IT-001","Laptop","Lenovo","ThinkPad T14 Gen 4","PF-39X8K2","Mai Nguyen Binh Tan","IT Support","Active","192.168.10.101"
+
+  /api/assets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Assets]
+      summary: Chi tiết một tài sản
+      operationId: getAsset
+      responses:
+        '200':
+          description: Tài sản tìm thấy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Assets]
+      summary: Cập nhật một phần thông tin tài sản (cấp phát / thu hồi / đổi trạng thái)
+      operationId: updateAsset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetPatchInput'
+            examples:
+              capPhat:
+                summary: Cấp phát thiết bị cho nhân viên
+                value:
+                  assignedTo: Le Hoang Nam
+                  dept: Sales
+                  status: Active
+                  ip: 192.168.10.131
+              thuHoi:
+                summary: Thu hồi về kho IT
+                value:
+                  assignedTo: Unassigned
+                  dept: IT Storage
+                  status: In Storage
+                  ip: '-'
+      responses:
+        '200':
+          description: Tài sản sau khi cập nhật (có thêm `updatedAt`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags: [Assets]
+      summary: Xoá tài sản khỏi hệ thống
+      operationId: deleteAsset
+      responses:
+        '200':
+          description: Đã xoá
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  deletedId:
+                    type: integer
+              example:
+                success: true
+                message: Đã xoá tài sản LP-SALES-021 (id 7).
+                deletedId: 7
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tickets:
+    get:
+      tags: [Tickets]
+      summary: Danh sách ticket (kèm bộ lọc)
+      operationId: listTickets
+      parameters:
+        - $ref: '#/components/parameters/QuerySearch'
+        - $ref: '#/components/parameters/FilterStatusTicket'
+        - $ref: '#/components/parameters/FilterPriority'
+      responses:
+        '200':
+          description: Mảng ticket khớp bộ lọc
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ticket'
+    post:
+      tags: [Tickets]
+      summary: Tạo ticket mới (tự gửi cảnh báo nếu High/Critical)
+      description: |
+        Ticket mới luôn ở trạng thái `Open`. Nếu `priority` là `High` hoặc `Critical`,
+        hệ thống gọi notifier (webhook thật nếu cấu hình `IT_WEBHOOK_URL`, ngược lại ghi
+        `data/notifications.log` + console) và trả thêm cờ `alerted: true`.
+        Lỗi webhook **không** làm hỏng request tạo ticket.
+            operationId: createTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketInput'
+            example:
+              title: Cannot resolve DNS after changing Wi-Fi
+              requester: Le Hoang Nam
+              dept: Sales
+              priority: High
+              category: DNS
+      responses:
+        '201':
+          description: Ticket created successfully (may include alerted flag for High/Critical)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+              example:
+                id: 1007
+                title: Cannot resolve DNS after changing Wi-Fi
+                requester: Le Hoang Nam
+                dept: Sales
+                priority: High
+                status: Open
+                category: DNS
+                createdAt: '2026-09-23 14:10'
+                alerted: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /api/tickets/export.csv:
+    get:
+      tags: [Tickets]
+      summary: Xuất báo cáo ticket ra CSV (tôn trọng bộ lọc)
+      operationId: exportTicketsCsv
+      parameters:
+        - $ref: '#/components/parameters/QuerySearch'
+        - $ref: '#/components/parameters/FilterStatusTicket'
+        - $ref: '#/components/parameters/FilterPriority'
+      responses:
+        '200':
+          description: File CSV RFC-4180 + UTF-8 BOM, tên dạng `IT-Ticket-Report_YYYYMMDD_HHmm.csv`
+          headers:
+            X-Total-Records:
+              description: Số bản ghi trong file
+              schema:
+                type: integer
+                example: 6
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /api/tickets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Tickets]
+      summary: Chi tiết một ticket
+      operationId: getTicket
+      responses:
+        '200':
+          description: Ticket tìm thấy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tickets/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    patch:
+      tags: [Tickets]
+      summary: Chuyển trạng thái ticket (Open → In Progress → Resolved → Closed)
+      description: |
+        Khi chuyển sang `Resolved`/`Closed`, server tự ghi `resolvedAt` (chỉ lần đầu).
+        Khi mở lại về `Open`/`In Progress`, `resolvedAt` bị xoá. Luôn ghi `updatedAt`.
+        Không truyền `status` thì mặc định là `Resolved`.
+      operationId: updateTicketStatus
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  $ref: '#/components/schemas/TicketStatus'
+              required: [status]
+            example:
+              status: In Progress
+      responses:
+        '200':
+          description: Ticket sau khi đổi trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+
+  /api/licenses:
+    get:
+      tags: [Licenses]
+      summary: Danh sách bản quyền phần mềm kèm mức sử dụng
+      operationId: listLicenses
+      responses:
+        '200':
+          description: Mảng bản quyền (đã thêm `available` và `utilizationPercent` do server tính)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/License'
+              example:
+                - id: 1
+                  software: Microsoft 365 Business Standard
+                  total: 100
+                  assigned: 84
+                  available: 16
+                  utilizationPercent: 84
+                  renewalDate: '2027-01-15'
+                - id: 4
+                  software: AutoCAD 2026 Commercial
+                  total: 15
+                  assigned: 15
+                  available: 0
+                  utilizationPercent: 100
+                  renewalDate: '2026-10-30'
+
+  /api/licenses/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PathId'
+    get:
+      tags: [Licenses]
+      summary: Chi tiết một bản quyền phần mềm
+      operationId: getLicense
+      responses:
+        '200':
+          description: Bản quyền tìm thấy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/License'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: Lịch sử cảnh báo đã gửi
+      operationId: listNotifications
+      parameters:
+        - name: limit
+          in: query
+          description: Số bản ghi gần nhất cần lấy (1–50, mặc định 20)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Kênh cảnh báo, lần gửi gần nhất và danh sách sự kiện
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationHistory'
+              example:
+                delivery: mock
+                channels:
+                  - telegram-bot://it-helpdesk-alert
+                  - smtp://it-alerts@bmc.local
+                lastDelivery:
+                  ticketId: 1006
+                  priority: Low
+                  alerted: false
+                  reason: 'priority dưới ngưỡng cảnh báo (High/Critical)'
+                  at: '2026-09-23 14:10'
+                count: 2
+                items:
+                  - ticketId: 1005
+                    priority: High
+                    alerted: true
+                    at: '2026-09-23 13:45'
+
+components:
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      description: Khoá chính (integer id trong `data/db.json`)
+      schema:
+        type: integer
+        example: 1
+    QuerySearch:
+      name: q
+      in: query
+      description: Tìm chuỗi con (không phân biệt hoa/thường) trên các trường văn bản của resource
+      schema:
+        type: string
+        example: thinkpad
+    FilterStatusAsset:
+      name: status
+      in: query
+      description: Lọc theo trạng thái tài sản
+      schema:
+        $ref: '#/components/schemas/AssetStatus'
+    FilterType:
+      name: type
+      in: query
+      description: Lọc theo loại thiết bị
+      schema:
+        type: string
+        example: Laptop
+    FilterStatusTicket:
+      name: status
+      in: query
+      description: Lọc theo trạng thái ticket
+      schema:
+        $ref: '#/components/schemas/TicketStatus'
+    FilterPriority:
+      name: priority
+      in: query
+      description: Lọc theo mức độ ưu tiên
+      schema:
+        $ref: '#/components/schemas/Priority'
+
+  responses:
+    BadRequest:
+      description: Thiếu trường bắt buộc hoặc payload không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Dữ liệu đăng ký tài sản không hợp lệ.
+            status: 400
+            path: /api/assets
+            details:
+              - 'Thiếu trường bắt buộc: brand'
+    NotFound:
+      description: Không tìm thấy bản ghi
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'Tài sản với id "999" không tồn tại.'
+            status: 404
+            path: /api/assets/999
+    Conflict:
+      description: Trùng Asset Tag hoặc Serial (ràng buộc duy nhất của kiểm kê)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'Mã tài sản (Asset Tag) "LP-IT-001" đã tồn tại — trùng với LP-IT-001 (id 1).'
+            status: 409
+            path: /api/assets
+    Unprocessable:
+      description: Giá trị enum không hợp lệ (status/priority)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: 'Trạng thái không hợp lệ: "Broken". Giá trị cho phép: Active, In Storage, Maintenance, Retired.'
+            status: 422
+            path: /api/assets
+    MethodNotAllowed:
+      description: Sai HTTP method cho endpoint đã tồn tại (kèm header `Allow`)
+      headers:
+        Allow:
+          description: Danh sách method được phép
+          schema:
+            type: string
+            example: GET, POST
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Phương thức PUT không được hỗ trợ cho /api/assets.
+            allow: [GET, POST]
+            status: 405
+            path: /api/assets
+
+
+  schemas:
+    AssetStatus:
+      type: string
+      description: Trạng thái vòng đời của tài sản
+      enum: [Active, In Storage, Maintenance, Retired]
+
+    TicketStatus:
+      type: string
+      description: Trạng thái ticket theo vòng đời ITIL
+      enum: [Open, In Progress, Resolved, Closed]
+
+    Priority:
+      type: string
+      description: Mức độ ưu tiên (`High`/`Critical` sẽ kích hoạt cảnh báo tự động)
+      enum: [Low, Medium, High, Critical]
+
+    Asset:
+      type: object
+      description: Tài sản CNTT đã đăng ký trong hệ thống
+      required: [id, tag, type, brand, model, serial, assignedTo, dept, status, ip, createdAt]
+      properties:
+        id:
+          type: integer
+          example: 1
+        tag:
+          type: string
+          description: Mã tài sản — duy nhất trong toàn hệ thống
+          example: LP-IT-001
+        type:
+          type: string
+          description: Loại thiết bị (Laptop, Desktop PC, Printer, Network Switch, …)
+          example: Laptop
+        brand:
+          type: string
+          example: Lenovo
+        model:
+          type: string
+          example: ThinkPad T14 Gen 4
+        serial:
+          type: string
+          description: Serial — duy nhất nếu được cung cấp
+          example: PF-39X8K2
+        assignedTo:
+          type: string
+          description: Người đang sử dụng, hoặc `Unassigned` khi nằm trong kho
+          example: Mai Nguyen Binh Tan
+        dept:
+          type: string
+          example: IT Support
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        ip:
+          type: string
+          description: Địa chỉ IP đang cấp, `-` nếu chưa gán
+          example: 192.168.10.101
+        createdAt:
+          type: string
+          description: Định dạng `yyyy-mm-dd hh:mm`
+          example: '2026-09-23 08:00'
+        updatedAt:
+          type: string
+          description: Chỉ xuất hiện sau khi tài sản được PATCH ít nhất một lần
+          example: '2026-09-23 14:10'
+
+    AssetInput:
+      type: object
+      description: Payload đăng ký tài sản mới
+      required: [tag, brand, model, serial]
+      properties:
+        tag:
+          type: string
+          example: LP-SALES-021
+        type:
+          type: string
+          default: Laptop
+        brand:
+          type: string
+          example: Dell
+        model:
+          type: string
+          example: Latitude 5450
+        serial:
+          type: string
+          example: 9PLK21X
+        assignedTo:
+          type: string
+          default: Unassigned
+        dept:
+          type: string
+          default: General
+        status:
+          allOf:
+            - $ref: '#/components/schemas/AssetStatus'
+          default: Active
+        ip:
+          type: string
+          default: '-'
+
+    AssetPatchInput:
+      type: object
+      description: Payload cập nhật một phần — chỉ gửi các trường cần thay đổi
+      properties:
+        tag:
+          type: string
+        type:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        serial:
+          type: string
+        assignedTo:
+          type: string
+        dept:
+          type: string
+        status:
+          $ref: '#/components/schemas/AssetStatus'
+        ip:
+          type: string
+
+    Ticket:
+      type: object
+      description: Ticket hỗ trợ theo vòng đời ITIL
+      required: [id, title, requester, dept, priority, status, category, createdAt]
+      properties:
+        id:
+          type: integer
+          example: 1001
+        title:
+          type: string
+          example: Cannot access Internet due to APIPA IP
+        requester:
+          type: string
+          example: Nguyen Thi Mai
+        dept:
+          type: string
+          example: Accounting
+        priority:
+          $ref: '#/components/schemas/Priority'
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        category:
+          type: string
+          description: Phân loại sự cố (Network, DNS, Active Directory, File Server, …)
+          example: Network
+        createdAt:
+          type: string
+          example: '2026-09-23 08:30'
+        updatedAt:
+          type: string
+          example: '2026-09-23 14:10'
+        resolvedAt:
+          type: string
+          description: Chỉ có khi ticket Resolved/Closed
+          example: '2026-09-23 11:05'
+
+    TicketInput:
+      type: object
+      description: Payload tạo ticket mới
+      required: [title, requester]
+      properties:
+        title:
+          type: string
+          example: Cannot resolve DNS after changing Wi-Fi
+        requester:
+          type: string
+          example: Le Hoang Nam
+        dept:
+          type: string
+          default: General
+        priority:
+          $ref: '#/components/schemas/Priority'
+          default: Medium
+        category:
+          type: string
+          default: General
+
+    License:
+      type: object
+      required: [id, software, total, assigned, available, utilizationPercent, renewalDate]
+      properties:
+        id:
+          type: integer
+          example: 1
+        software:
+          type: string
+          example: Microsoft 365 Business Standard
+        total:
+          type: integer
+          example: 100
+        assigned:
+          type: integer
+          example: 84
+        available:
+          type: integer
+          description: total - assigned
+          example: 16
+        utilizationPercent:
+          type: integer
+          description: round(assigned / total * 100)
+          example: 84
+        renewalDate:
+          type: string
+          example: '2027-01-15'
+
+    Health:
+      type: object
+      description: Trạng thái dịch vụ (HEALTHCHECK của Docker)
+      required: [status, uptime, timestamp]
+      properties:
+        status:
+          type: string
+          example: ok
+        uptime:
+          type: number
+          description: Số giây server đã chạy
+          example: 42.18
+        timestamp:
+          type: string
+          example: '2026-09-23 14:10'
+        storage:
+          type: string
+          example: json-file
+        dataDir:
+          type: string
+          example: /app/data
+        seeded:
+          type: boolean
+          example: false
+        service:
+          type: string
+          example: enterprise-it-asset-portal
+        version:
+          type: string
+          example: 2.0.0
+        host:
+          type: string
+          example: it-portal
+        counts:
+          type: object
+          description: Số bản ghi hiện có trong db.json
+          properties:
+            assets:
+              type: integer
+              example: 6
+            tickets:
+              type: integer
+              example: 6
+            licenses:
+              type: integer
+              example: 4
+        webhook:
+          type: string
+          example: mock
+
+    DashboardStats:
+      type: object
+      description: KPI tổng hợp cho màn hình Dashboard
+      required: [totalAssets, openTickets, slaPercent, generatedAt]
+      properties:
+        totalAssets:
+          type: integer
+          example: 6
+        activeAssets:
+          type: integer
+          example: 5
+        storageAssets:
+          type: integer
+          example: 1
+        maintenanceAssets:
+          type: integer
+          example: 0
+        retiredAssets:
+          type: integer
+          example: 0
+        openTickets:
+          type: integer
+          example: 1
+        resolvedTickets:
+          type: integer
+          example: 5
+        closedTickets:
+          type: integer
+          example: 0
+        criticalAlerts:
+          type: integer
+          example: 0
+        slaPercent:
+          type: number
+          description: Tỷ lệ ticket đã Resolved/Closed trên tổng số
+          example: 83.3
+        assetsByType:
+          type: object
+          description: Thống kê tài sản theo loại
+          additionalProperties:
+            type: integer
+          example:
+            Laptop: 3
+            Desktop PC: 1
+            Printer: 1
+            Network Switch: 1
+        licenseTotal:
+          type: integer
+          example: 245
+        licenseAssigned:
+          type: integer
+          example: 217
+        licenseAlerts:
+          type: integer
+          description: Số bản quyền trên ngưỡng cảnh báo sử dụng
+          example: 1
+        generatedAt:
+          type: string
+          example: '2026-09-23 14:10'
+
+    NotificationHistory:
+      type: object
+      description: Lịch sử cảnh báo tự động (webhook/mock)
+      required: [delivery, channels, count, items]
+      properties:
+        delivery:
+          type: string
+          example: mock
+        channels:
+          type: array
+          items:
+            type: string
+          example:
+            - telegram-bot://it-helpdesk-alert
+            - smtp://it-alerts@bmc.local
+        lastDelivery:
+          type: object
+          description: Bản ghi gửi gần nhất
+          properties:
+            ticketId:
+              type: integer
+              example: 1006
+            priority:
+              $ref: '#/components/schemas/Priority'
+            alerted:
+              type: boolean
+              example: false
+            reason:
+              type: string
+              example: priority dưới ngưỡng cảnh báo (High/Critical)
+            at:
+              type: string
+              example: '2026-09-23 14:10'
+        count:
+          type: integer
+          example: 2
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              ticketId:
+                type: integer
+                example: 1005
+              priority:
+                $ref: '#/components/schemas/Priority'
+              alerted:
+                type: boolean
+                example: true
+              at:
+                type: string
+                example: '2026-09-23 13:45'
+
+    Error:
+      type: object
+      description: Lỗi theo hợp đồng API (400/404/405/409/422)
+      required: [error, status, path]
+      properties:
+        error:
+          type: string
+          example: 'Thiếu trường bắt buộc: title.'
+        status:
+          type: integer
+          example: 400
+        path:
+          type: string
+          example: /api/tickets
+        allow:
+          type: array
+          description: Chỉ có ở lỗi 405 — danh sách method được phép
+          items:
+            type: string
+          example: [GET, POST]
+        errors:
+          type: array
+          description: Chi tiết từng trường sai (lỗi 400/422)
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: priority
+              message:
+                type: string
+                example: priority phải là một trong Low, Medium, High, Critical.
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Đăng nhập và lấy token từ POST /api/login, gửi kèm header
+        Authorization: Bearer <token>. Token hết hạn sau 8 giờ.
+
+

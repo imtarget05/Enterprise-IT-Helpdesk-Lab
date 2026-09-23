@@ -1,38 +1,39 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BMC Vietnam — IT Asset & Helpdesk Management Portal</title>
+  <meta name="description" content="Enterprise IT Asset & Helpdesk Portal — quản lý thiết bị, ticket ITIL, bản quyền phần mềm">
+  <title>Enterprise IT Portal — Asset & Helpdesk Management</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-layout">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="logo-icon">🏢</div>
+        <div class="logo-icon" aria-hidden="true">IT</div>
         <div class="brand-text">
-          <h2>BMC IT PORTAL</h2>
-          <span>Enterprise Management</span>
+          <h2>ENTERPRISE IT</h2>
+          <span>Asset & Helpdesk Portal</span>
         </div>
       </div>
 
-      <nav class="nav-menu">
+      <nav class="nav-menu" aria-label="Điều hướng chính">
         <button class="nav-item active" data-tab="tab-dashboard">
-          <span class="icon">📊</span> Dashboard
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg></span> Dashboard
         </button>
         <button class="nav-item" data-tab="tab-assets">
-          <span class="icon">💻</span> IT Assets (Thiết Bị)
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span> IT Assets (Thiết Bị)
         </button>
         <button class="nav-item" data-tab="tab-tickets">
-          <span class="icon">🎫</span> Helpdesk Tickets
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v10H4z"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span> Helpdesk Tickets
         </button>
         <button class="nav-item" data-tab="tab-licenses">
-          <span class="icon">🔑</span> Software Licenses
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span> Software Licenses
         </button>
       </nav>
 
@@ -44,15 +45,20 @@
             <span>Internal IT Specialist</span>
           </div>
         </div>
+        <div class="text-muted" style="margin-top:8px;font-size:11px;">BMC IT PORTAL • Enterprise build v2</div>
       </div>
     </aside>
 
     <!-- Main Content -->
     <main class="main-content">
       <header class="top-header">
-        <h1 id="page-title">Hệ Thống Quản Lý Tài Sản & Hỗ Trợ Kỹ Thuật IT</h1>
+        <div>
+          <h1 id="page-title">Hệ Thống Quản Lý Tài Sản & Hỗ Trợ Kỹ Thuật IT</h1>
+          <div class="breadcrumb">Enterprise IT / Internal Portal / <span id="breadcrumb-tab">Dashboard</span></div>
+        </div>
         <div class="header-actions">
-          <span class="status-indicator live"></span>
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Chuyển chế độ sáng tối">◐ Chế độ tối</button>
+          <span class="status-indicator live" aria-hidden="true"></span>
           <span class="system-time" id="clock">Online</span>
         </div>
       </header>
@@ -120,7 +126,7 @@
       <!-- TAB 2: IT ASSETS -->
       <section id="tab-assets" class="tab-pane">
         <div class="section-toolbar">
-          <input type="text" id="asset-search" placeholder="🔍 Tìm theo mã tài sản, người dùng, model, serial, IP..." class="search-input" aria-label="Tìm kiếm thiết bị">
+          <input type="text" id="asset-search" placeholder="Tìm theo mã tài sản, người dùng, model, serial, IP..." class="search-input" aria-label="Tìm kiếm thiết bị">
           <select id="asset-filter-type" class="filter-select" aria-label="Lọc theo loại thiết bị">
             <option value="">Tất cả loại</option>
             <option value="Laptop">Laptop</option>
@@ -137,7 +143,7 @@
           </select>
           <div class="toolbar-actions">
             <button class="btn btn-export" id="btn-export-assets" title="Tải file kiểm kê .csv theo bộ lọc đang chọn">
-              <span class="btn-icon">📑</span> Xuất Danh Sách Tài Sản (CSV)
+              <span class="btn-icon" aria-hidden="true">↓</span> Xuất Danh Sách Tài Sản (CSV)
             </button>
             <button class="btn btn-secondary" id="btn-refresh-assets" title="Tải lại dữ liệu từ server">↻</button>
             <button class="btn btn-primary" id="btn-add-asset">+ Thêm Thiết Bị Mới</button>
@@ -172,7 +178,7 @@
       <!-- TAB 3: TICKETS -->
       <section id="tab-tickets" class="tab-pane">
         <div class="section-toolbar">
-          <input type="text" id="ticket-search" placeholder="🔍 Tìm theo nội dung ticket, người yêu cầu, danh mục..." class="search-input" aria-label="Tìm kiếm ticket">
+          <input type="text" id="ticket-search" placeholder="Tìm theo nội dung ticket, người yêu cầu, danh mục..." class="search-input" aria-label="Tìm kiếm ticket">
           <select id="ticket-filter-status" class="filter-select" aria-label="Lọc ticket theo trạng thái">
             <option value="">Tất cả trạng thái</option>
             <option value="Open">Mới (Open)</option>
@@ -189,7 +195,7 @@
           </select>
           <div class="toolbar-actions">
             <button class="btn btn-export" id="btn-export-tickets" title="Tải báo cáo ticket .csv">
-              <span class="btn-icon">📑</span> Xuất Báo Cáo Ticket (CSV)
+              <span class="btn-icon" aria-hidden="true">↓</span> Xuất Báo Cáo Ticket (CSV)
             </button>
             <button class="btn btn-primary" id="btn-add-ticket">+ Tạo Ticket Mới</button>
           </div>
@@ -372,5 +378,40 @@
   </div>
 
   <script src="app.js"></script>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var btn = document.getElementById('theme-toggle');
+      var crumb = document.getElementById('breadcrumb-tab');
+      try {
+        var saved = localStorage.getItem('it-portal-theme');
+        if (saved === 'dark' || saved === 'light') root.setAttribute('data-theme', saved);
+      } catch (e) {}
+      function syncLabel() {
+        if (btn) btn.textContent = root.getAttribute('data-theme') === 'dark' ? '○ Chế độ sáng' : '◐ Chế độ tối';
+      }
+      syncLabel();
+      if (btn) btn.addEventListener('click', function () {
+        var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        try { localStorage.setItem('it-portal-theme', next); } catch (e) {}
+        syncLabel();
+      });
+      document.querySelectorAll('.nav-item').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (crumb) crumb.textContent = (b.textContent || '').trim();
+        });
+      });
+      // Clock: giờ hệ thống, giữ chữ Online khi API sống (app.js sẽ đổi thành Offline khi mất mạng)
+      var clock = document.getElementById('clock');
+      function tick() {
+        if (!clock || clock.textContent === 'Offline') return;
+        var d = new Date();
+        var p = function (n) { return String(n).padStart(2, '0'); };
+        clock.textContent = 'Online • ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+      }
+      setInterval(tick, 1000); tick();
+    })();
+  </script>
 </body>
 </html>

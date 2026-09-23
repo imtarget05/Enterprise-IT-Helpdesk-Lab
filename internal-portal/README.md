@@ -84,6 +84,10 @@ fixtures/            db.baseline.json — snapshot dữ liệu demo để restor
 
 ### REST API
 
+> 📄 **OpenAPI 3.1 spec:** [`public/openapi.yaml`](public/openapi.yaml) — được phục vụ tĩnh tại `/openapi.yaml`,
+> dán vào [Swagger Editor](https://editor.swagger.io) để xem docs tương tác (request/response schema, enum, ví dụ).
+> CI validate spec ở mỗi push (job `openapi-spec`).
+
 | Method | Path | Mô tả |
 |---|---|---|
 | GET | `/api/health` | trạng thái, version, storage, số bản ghi |

@@ -252,6 +252,8 @@ Persistence file JSON nguyên tử — **không cần database ngoài, 0 depende
 | GET | `/api/licenses` · `/api/licenses/:id` | Bản quyền + `utilizationPercent` |
 | GET | `/api/notifications` | Lịch sử cảnh báo đã gửi (`?limit=`) |
 
+**Tài liệu API đầy đủ dạng OpenAPI 3.1:** [`internal-portal/public/openapi.yaml`](internal-portal/public/openapi.yaml) — server phục vụ tĩnh tại `/openapi.yaml`, dán vào [Swagger Editor](https://editor.swagger.io) để xem dạng tương tác. Spec được **validate tự động trong CI** (job `openapi-spec`) nên luôn đúng chuẩn.
+
 Mã lỗi theo hợp đồng rõ ràng: **400** thiếu/sai dữ liệu · **404** không tồn tại · **405** + header `Allow` khi sai method · **409** trùng Asset Tag/Serial · **422** giá trị enum sai.
 
 ### Chạy & đóng gói

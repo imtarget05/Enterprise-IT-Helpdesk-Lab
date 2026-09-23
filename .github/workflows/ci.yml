@@ -73,7 +73,7 @@ jobs:
       - name: Parse .ps1 bằng PowerShell AST parser
         run: bash scripts/verify-ps1-syntax.sh
 
-  # ---------------------------------------------------------------------------
+  # -----------------------------------------------------------------------
   # 3) Validate Docker Compose config + biến môi trường
   # ---------------------------------------------------------------------------
   compose-config:
@@ -88,3 +88,21 @@ jobs:
 
       - name: Kiểm tra biến interpolation có trong .env.example
         run: bash scripts/verify-config.sh
+
+  # ---------------------------------------------------------------------------
+  # 4) Validate OpenAPI spec (swagger-cli) — tài liệu API luôn đúng chuẩn
+  # ---------------------------------------------------------------------------
+  openapi-spec:
+    name: OpenAPI spec valid
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate internal-portal/public/openapi.yaml
+        run: npx --yes swagger-cli validate internal-portal/public/openapi.yaml
