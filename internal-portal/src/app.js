@@ -13,9 +13,20 @@ const cors = require('cors');
 const path = require('node:path');
 const os = require('node:os');
 
+const packageJson = require('../package.json');
+const VERSION = packageJson.version;
+
 const { createStore } = require('./store');
 const { createNotifier } = require('./notify');
 const { toCsv, auditFilename, ASSET_COLUMNS } = require('./csv');
+
+// --- CORS allowlist -------------------------------------------------------------------
+/** Parse chuỗi origins: ',' phân cách → mảng; nếu '*' (hoặc rỗng) → cho phép mọi origin. */
+function parseAllowedOrigins(raw) {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s || s === '*') return '*';
+  return s.split(',').map((s) => s.trim()).filter(Boolean);
+}
 
 // --- Nghiệp vụ: enum chuẩn hoá dữ liệu theo ITIL ---
 const ASSET_STATUSES = ['Active', 'In Storage', 'Maintenance', 'Retired'];
@@ -72,6 +83,7 @@ const notFound = (kind, id) => httpError(404, `${kind} với id "${id}" không t
 async function createApp(options = {}) {
   const dataDir = path.resolve(options.dataDir || process.env.DATA_DIR || path.join(process.cwd(), 'data'));
   const staticDir = options.staticDir || path.join(__dirname, '..', 'public');
+  const allowedOrigins = options.allowedOrigins ?? process.env.ALLOWED_ORIGINS;
 
   const store = createStore({ dataDir, seed: options.seed });
   await store.load();
@@ -80,7 +92,7 @@ async function createApp(options = {}) {
 
   const app = express();
   app.disable('x-powered-by');
-  app.use(cors());
+  app.use(cors({ origin: parseAllowedOrigins(options.allowedOrigins ?? process.env.ALLOWED_ORIGINS) }));
   app.use(express.json({ limit: '128kb' }));
   if (options.requestLogger !== false) {
     app.use((req, res, next) => {
@@ -102,7 +114,7 @@ async function createApp(options = {}) {
       dataDir,
       seeded: store.seeded,
       service: 'enterprise-it-asset-portal',
-      version: process.env.npm_package_version || '2.0.0',
+      version: VERSION,
       host: os.hostname(),
       counts: store.summary(),
       webhook: notifier.webhookUrl ? 'configured' : 'mock',
@@ -471,7 +483,7 @@ async function createApp(options = {}) {
     res.status(status).json(body);
   });
 
-  return { app, store, notifier, dataDir, version: '2.0.0' };
+  return { app, store, notifier, dataDir, version: VERSION };
 }
 
 

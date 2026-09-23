@@ -11,7 +11,7 @@ data
 docker-compose.yml
 Dockerfile
 .dockerignore
-test
 test-api.sh
 README.md
 docs
+# Lưu ý: thư mục test/ PHẢI được giữ lại vì Dockerfile có stage `test` (npm test).

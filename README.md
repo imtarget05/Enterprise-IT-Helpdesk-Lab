@@ -75,23 +75,39 @@ Toàn bộ 20 tickets được biên soạn chi tiết theo tiêu chuẩn ITIL (
 - **`scripts/New-CompanyUser.ps1`:** Đọc file danh sách nhân viên mới dạng CSV, tự động khởi tạo tài khoản Active Directory, đưa vào đúng OU phòng ban, gán mật khẩu ngẫu nhiên an toàn và tự động cấp nhóm bảo mật.
 - **`scripts/Export-ITAssetAudit.ps1`:** Tự động truy vấn WMI / CIM trên máy trạm để trích xuất đầy đủ thông số phần cứng (CPU, RAM, ổ đĩa, địa chỉ MAC, serial BIOS) và xuất báo cáo JSON phục vụ kiểm kê tài sản.
 - **`scripts/Test-NetworkHealth.ps1`:** Bộ công cụ kiểm tra tự động 9 bước từ Loopback, Gateway, DNS nội bộ, cổng xác thực Kerberos/LDAP Domain Controller đến đường truyền internet quốc tế.
+- **`scripts/verify-ps1-syntax.sh`:** Kiểm tra cú pháp 3 script ở trên bằng **AST parser chính thức của PowerShell** (`Language.Parser::ParseFile`), chạy qua `pwsh` local hoặc container `mcr.microsoft.com/powershell` — dùng được trên macOS/Linux nơi không có PowerShell.
+
+> Đã sửa 1 lỗi parse có thật tìm thấy nhờ kiểm thử này: `New-CompanyUser.ps1` dùng `"$username:"` (PowerShell hiểu nhầm là scope/drive → "Variable reference is not valid"), nay viết đúng thành `"${username}:"`.
 
 ---
 
 ## 4. ỨNG DỤNG NỘI BỘ IT ASSET & HELPDESK PORTAL (DÀNH CHO JD BMC)
 
-Ứng dụng web nội bộ hoàn chỉnh đặt tại thư mục `internal-portal/`:
-- **Công nghệ:** Node.js, Express, HTML5, CSS3 Responsive, Vanilla JavaScript REST Client.
+Ứng dụng web nội bộ hoàn chỉnh đặt tại thư mục `internal-portal/` (chi tiết: [`internal-portal/README.md`](internal-portal/README.md)):
+- **Công nghệ:** Node.js + Express 4 (REST API), HTML5/CSS3 Responsive, Vanilla JavaScript. Persistence file JSON nguyên tử — **không cần database ngoài, 0 dependency native**.
 - **Tính năng nổi bật:**
-  - **Dashboard tổng quan:** Thống kê số lượng tài sản đang hoạt động, thiết bị trong kho, ticket mở/đóng, tỷ lệ SLA.
-  - **Quản lý thiết bị (IT Assets):** Đăng ký Laptop/PC/Máy in mới, gán mã Asset Tag, theo dõi người sử dụng, cập nhật IP và lịch sử bảo hành.
-  - **Quản lý Ticket hỗ trợ:** Tiếp nhận yêu cầu, phân loại sự cố, cập nhật tiến độ xử lý và đóng ticket.
-  - **Quản lý bản quyền (Software Licenses):** Giám sát hạn dùng và số lượng license Microsoft 365, Antivirus, AutoCAD.
+  - **Dashboard tổng quan:** KPI tài sản theo trạng thái, ticket mở/đóng, tỷ lệ SLA, biểu đồ cơ cấu theo loại, hàng đợi cảnh báo.
+  - **Quản lý thiết bị (IT Assets):** Đăng ký Laptop/PC/Máy in/Switch, gán Asset Tag (unique — trùng sẽ bị từ chối 409), cấp phát / thu hồi, tìm kiếm + lọc + sắp xếp.
+  - **Xuất báo cáo kiểm kê:** Nút **"Xuất Danh Sách Tài Sản (CSV)"** — file `IT-Asset-Audit_YYYYMMDD_HHmm.csv` chuẩn RFC-4180 kèm UTF-8 BOM, mở trực tiếp bằng Excel, tôn theo bộ lọc đang chọn.
+  - **Quản lý Ticket hỗ trợ:** Tiếp nhận, phân loại sự cố ITIL, đóng/mở lại ticket; ticket **High/Critical tự động bắn cảnh báo** (mock Telegram/Email → cấu hình `IT_WEBHOOK_URL` để nối Slack/Teams thật).
+  - **Quản lý bản quyền (Software Licenses):** Giám sát hạn tái tục, % sử dụng, cảnh báo hết chỗ cấp phát.
+  - **Dữ liệu bền vững:** mọi thay đổi ghi vào `data/db.json` (atomic tmp→rename, corrupt-safe), sống sót qua restart process/container; graceful shutdown khi nhận SIGTERM.
 
 ### Hướng dẫn chạy Portal:
 ```bash
 cd internal-portal
 npm install
-npm start
+npm start                       # → http://localhost:3000
 ```
-Mở trình duyệt tại: `http://localhost:3000`
+
+Chạy bằng Docker (khuyên dùng cho môi trường máy chủ):
+```bash
+docker compose up -d --wait     # data mount vào ./data, tự restart nếu treo (healthcheck)
+```
+
+Kiểm thử tự động:
+```bash
+npm test                        # ~93 assertion: unit + integration HTTP + restart persistence + UI contract
+./test-api.sh                   # 61 kiểm tra curl phủ 100% REST endpoints, in bảng PASS/FAIL
+bash ../scripts/verify-ps1-syntax.sh   # parse 3 script PowerShell bằng AST parser thật (Docker/pwsh)
+```

@@ -13,27 +13,60 @@ services:
     container_name: it-portal
     restart: unless-stopped
     ports:
-      - '${PORT:-3000}:3000'
+      # Tách rõ port host (publish) và port app (listen trong container).
+      # Mặc định: publish ${PORT_HOST:-3000} → container port ${APP_PORT:-3000}.
+      # Người dùng truy cập:  http://localhost:${PORT_HOST}
+      - '${PORT_HOST:-3000}:${APP_PORT:-3000}'
+      # Nếu chỉ muốn binding vào loopback để đặt sau reverse proxy:
+      #   - '127.0.0.1:${PORT_HOST:-3000}:${APP_PORT:-3000}'
     environment:
-      NODE_ENV: production
-      PORT: '3000'
-      DATA_DIR: /app/data
-      # Tuỳ chọn: dán webhook Slack/Teams/Mattermost để nhận ticket High/Critical.
-      # Bỏ trống → module notification chạy ở chế độ mock (console + data/notifications.log).
+      NODE_ENV: ${NODE_ENV:-production}
+      TZ: ${TZ:-Asia/Ho_Chi_Minh}
+      PORT: ${APP_PORT:-3000}
+      DATA_DIR: ${DATA_DIR:-/app/data}
       IT_WEBHOOK_URL: ${IT_WEBHOOK_URL:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
     volumes:
-      # Dữ liệu bền vững: db.json + notifications.log nằm ngoài container.
-      - ./data:/app/data
+      # Bind thư mục data trên host vào thư mục dữ liệu trong container.
+      # DATA_HOST_PATH (host)  →  /app/data (container) — quá trình này giống Docker.
+      - ${DATA_HOST_PATH:-./data}:${DATA_DIR:-/app/data}
+    tmpfs:
+      # /tmp phải writable để node/npm chạy được; /app/data vẫn nằm ở volume bind mount
+      # ở trên (rw) nên không bị ảnh hưởng.
+      - /tmp:size=16m,mode=1777
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: ${MEM_LIMIT:-256m}
+          cpus: ${CPU_LIMIT:-1.0}
+    logging:
+      driver: json-file
+      options:
+        max-size: ${LOG_MAX_SIZE:-10m}
+        max-file: ${LOG_MAX_FILE:-3}
+    # Healthcheck: dùng process.env.PORT thay vì cứng 3000 để tránh lệch với
+    # Dockerfile (cũng dùng process.env.PORT ở CMD healthcheck). Có hiệu lực
+    # khi `docker compose up -d` hoặc docker run; nếu chưa build, compose sẽ
+    # vẫn chạy nhưng chỉ báo health khi container đã mount hoàn tất.
     healthcheck:
-      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+      # Test: 'executable' không cần command shell, chạy trực tiếp node.
+      # Lệnh này dùng fetch đến /api/health và exit(0) nếu status OK, exit(1) nếu không.
+      # timeout: 10s;  gián đoạn (start-period) để app boot hoàn tất trước khi check.
+      test: ['CMD','node','-e',"fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       start_period: 10s
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - it-network
     labels:
-      app.kubernetes.io/name: it-asset-helpdesk-portal
+      app.kubernetes.io/version: ${APP_PORT:-3000}
+      app.kubernetes.io/component: it-asset-helpdesk-portal
       app.kubernetes.io/part-of: bmc-enterprise-it-lab
 
 networks:

@@ -59,14 +59,21 @@
 
 ## Tasks
 
-- [ ] **T1** Store + seed: red (`Cannot find module`) → green (load/commit/corrupt/nextId).
-- [ ] **T2** CSV + notifier: escaping/BOM/filename, threshold alert, webhook failure tolerated.
-- [ ] **T3** API `src/app.js` + bootstrap `server.js`: mọi endpoint + validation + 404/500 handler + `await store.load()` trước listen.
-- [ ] **T4** UI: Export CSV button, filters, sort, toast, skeleton, debounce, error handling.
-- [ ] **T5** Dockerfile multi-stage + compose + .dockerignore + build/run/restart-persistence verify.
-- [ ] **T6** `test-api.sh` phủ 100% endpoints + `npm test`; kiểm tra cú pháp 3 file `.ps1`; cập nhật README + docs.
+- [x] **T1** Store + seed: red (`Cannot find module`) → green (load/commit/corrupt/nextId).
+- [x] **T2** CSV + notifier: escaping/BOM/filename, threshold alert, webhook failure tolerated.
+- [x] **T3** API `src/app.js` + bootstrap `server.js`: mọi endpoint + validation + 404/500 handler + `await store.load()` trước listen.
+- [x] **T4** UI: Export CSV button, filters, sort, toast, skeleton, debounce, error handling.
+- [x] **T5** Dockerfile multi-stage + compose + .dockerignore + build/run/restart-persistence verify.
+- [x] **T6** `test-api.sh` phủ 100% endpoints + `npm test`; kiểm tra cú pháp 3 file `.ps1`; cập nhật README + docs.
 
 ## Self-review
 
 - Spec coverage: persistence (T1/T3), CSV export (T2/T3/T4), webhook mock (T2/T3), Docker (T5), auto test (T3/T6), UI mượt (T4), PowerShell syntax (T6). Không còn requirement nào chưa có task.
 - Type consistency: `createStore`, `createApp`, `toCsv`, `auditFilename`, `createNotifier` dùng thống nhất giữa các task.
+- Kết quả kiểm thütün thực tế (2026-09-23):
+  - `npm test`: **93/93 PASS** (unit + integration HTTP + restart persistence + UI contract).
+  - `./test-api.sh`: **61/61 PASS** — 100% REST endpoints, bao gồm persistence qua restart.
+  - `bash scripts/verify-config.sh`: **toàn bộ ✅** — compose hợp lệ, interpolation biến khớp .env.example, healthcheck dùng `process.env.PORT`, `cap_drop: ALL` / `security_opt: no-new-privileges` / `read_only: true` / log rotation `max-size: 10m` + `max-file: 3` / restart `unless-stopped`.
+  - `bash scripts/verify-ps1-syntax.sh`: **3/3 PS1 file parse sạch** qua AST parser PowerShell (container `mcr.microsoft.com/powershell:lts-alpine`).
+  - Container `it-portal`: chạy healthy, dữ liệu persistence qua bind mount `./data/db.json` (6 assets, 6 tickets, 4 licenses giữ nguyên sau recreate).
+- Scripts mới: `scripts/verify-config.sh` (kiểm tra compose + container), `scripts/prepare-data-dir.sh` (chuẩn bị thư mục data), `scripts/verify-ps1-syntax.sh` (lint PS1 qua Docker).

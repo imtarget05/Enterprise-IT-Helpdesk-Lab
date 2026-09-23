@@ -45,6 +45,14 @@ trap cleanup EXIT INT TERM
 
 # ---------- khởi động server (nếu BASE_URL không được cung cấp) ----------
 if [ -z "$BASE_URL" ]; then
+  # Port đã bị chiếm bởi tiến trình khác → chọn port khác để tránh test nhầm server cũ
+  # (server cũ có dữ liệu cũ sẽ làm sai lệch kết quả kiểm tra 409/trùng tag...).
+  if curl -sf "http://127.0.0.1:${PORT}/api/health" > /dev/null 2>&1; then
+    printf "${C_Y}⚠ Port %s đã có portal khác đang chạy → chuyển sang port dự phòng.${C_0}\n" "$PORT"
+    for CAND in 3211 3212 3213 3220 3230 4321; do
+      curl -sf "http://127.0.0.1:${CAND}/api/health" > /dev/null 2>&1 || { PORT="$CAND"; break; }
+    done
+  fi
   BASE_URL="http://127.0.0.1:${PORT}"
   DATA_DIR="$OUT_DIR/data"
   mkdir -p "$DATA_DIR"

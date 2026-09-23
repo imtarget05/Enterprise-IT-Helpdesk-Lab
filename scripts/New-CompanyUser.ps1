@@ -97,7 +97,9 @@ foreach ($emp in $employees) {
         }
 
     } catch {
-        Write-Error "  -> [FAILED] Error creating $username: $($_.Exception.Message)"
+        # NOTE: must wrap as ${username} -- plain "$username:" makes PowerShell treat
+        # "username:" as a scope/drive reference and the script fails to parse.
+        Write-Error "  -> [FAILED] Error creating ${username}: $($_.Exception.Message)"
     }
 }
 

@@ -20,7 +20,11 @@ const HISTORY_LIMIT = 50;
 const WEBHOOK_TIMEOUT_MS = 3000;
 
 function timestamp() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+  // Cùng định dạng "yyyy-mm-dd hh:mm" với API/UI (giờ địa phương server)
+  // để đối chiếu log cảnh báo với thời gian mở ticket được dễ dàng.
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 function createNotifier(options = {}) {

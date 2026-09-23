@@ -72,3 +72,58 @@ test('mọi render ra HTML đều escapeHtml (chống XSS từ dữ liệu)', ()
     assert.ok(!js.includes(raw), `phải bọc escapeHtml cho ${raw}`);
   }
 });
+
+test('index.html cân bằng thẻ (không có thẻ mở chưa đóng)', () => {
+  const VOID = new Set(['meta', 'link', 'input', 'br', 'hr', 'img', 'source']);
+  const stack = [];
+  const problems = [];
+  const re = /<(\/?)([a-zA-Z][\w-]*)([^>]*)>/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const [, slash, tagRaw, attrs] = m;
+    const tag = tagRaw.toLowerCase();
+    if (tag === '!doctype' || VOID.has(tag) || /\/\s*$/.test(attrs)) continue;
+    if (slash) {
+      const top = stack.pop();
+      if (top !== tag) problems.push(`</${tag}> đóng sai chỗ (đang mở <${top}>)`);
+    } else {
+      stack.push(tag);
+    }
+  }
+  assert.deepEqual(problems, [], 'cấu trúc HTML sai');
+  assert.deepEqual(stack, [], `thẻ chưa đóng: ${stack.join(', ')}`);
+});
+
+test('index.html không có id trùng lặp (tránh DOM trả sai phần tử)', () => {
+  const seen = new Map();
+  for (const m of html.matchAll(/\bid="([^"]+)"/g)) seen.set(m[1], (seen.get(m[1]) || 0) + 1);
+  const dupes = [...seen].filter(([, n]) => n > 1).map(([id]) => id);
+  assert.deepEqual(dupes, [], `id trùng: ${dupes.join(', ')}`);
+});
+
+test('class JS thêm động vào DOM đều có định nghĩa trong CSS', () => {
+  const dynamic = new Set();
+  for (const m of js.matchAll(/classList\.(?:add|remove|toggle)\(\s*'([\w-]+)'/g)) dynamic.add(m[1]);
+  for (const m of js.matchAll(/class="([^"$]*)"/g)) m[1].split(/\s+/).filter(Boolean).forEach((c) => dynamic.add(c));
+  for (const m of js.matchAll(/class="([\w-]+) \$\{/g)) dynamic.add(m[1]); // class tĩnh trước template
+
+  const missing = [...dynamic].filter((cls) => cls && !cls.includes('$') && !css.includes(`.${cls}`));
+  assert.deepEqual(missing, [], `class không có trong styles.css: ${missing.join(', ')}`);
+});
+
+test('mọi endpoint mà UI gọi đều tồn tại ở backend', () => {
+  const { listSourceRoutes } = require('./list-routes');
+  const routes = listSourceRoutes().map((r) => r.path);
+  const called = [...js.matchAll(/apiJson\(\s*[`'"]([^`'"$]+)/g)]
+    .map((m) => m[1])
+    .concat([...js.matchAll(/downloadFile\(\s*`([^`'\"$]+)/g)].map((m) => m[1].replace(/\\\$\{[^}]*\}/g, '')));
+
+  assert.ok(called.length >= 8, `mong đợi ≥8 endpoint được UI gọi, nhận ${called.length}`);
+  for (const raw of called) {
+    const path = raw.split('?')[0].replace(/\/1$/, '/:id');
+    const normalised = path.replace(/\/$/, '');
+    const ok = routes.includes(normalised) || routes.some((r) => r === normalised || r.replace(':id', '1') === normalised);
+    assert.ok(ok, `UI gọi ${raw} nhưng backend không có route tương ứng`);
+  }
+});
+
