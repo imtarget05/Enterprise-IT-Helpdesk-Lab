@@ -10,7 +10,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TARGET_DIR="${1:-$SCRIPT_DIR}"
+# Docker requires an absolute path for volume mounts — resolve it immediately.
+TARGET_DIR="$(cd "${1:-$SCRIPT_DIR}" && pwd)"
 IMAGE="mcr.microsoft.com/powershell:lts-alpine"
 
 if ! ls "$TARGET_DIR"/*.ps1 >/dev/null 2>&1; then
