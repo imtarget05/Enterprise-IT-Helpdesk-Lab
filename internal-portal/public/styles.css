@@ -831,6 +831,11 @@ body {
 [data-theme='dark'] .btn-ai { background: #1f2a6d; color: #c7d7fe; border-color: #3538cd; }
 [data-theme='dark'] .ai-error { background: #2a1215; border-color: #7a271a; color: #fda29b; }
 
+/* Trạng thái ẩn phải thắng mọi display: flex/grid/block (nếu không, các
+   banner/spinner có thuộc tính `hidden` vẫn hiển thị — bug từng làm banner
+   offline đỏ phủ lên dashboard dù API vẫn sống và spinner AI không bao giờ tắt). */
+[hidden] { display: none !important; }
+
 .spinner {
   width: 13px;
   height: 13px;

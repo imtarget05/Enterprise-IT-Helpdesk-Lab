@@ -551,6 +551,7 @@ async function analyzeTicket(id) {
   try {
     const data = await apiJson('/api/ai/analyze', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ticketId: id }),
     });
 

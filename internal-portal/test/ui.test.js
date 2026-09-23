@@ -46,6 +46,26 @@ test('các hàm gọi từ onclick trong app.js đều được định nghĩa',
   }
 });
 
+test('mọi lời gọi api/apiJson có body đều set Content-Type: application/json', () => {
+  // Regression: POST/PATCH thiếu header này → Express json parser bỏ qua body
+  // → API trả 400 "thiếu dữ liệu" dù UI gửi đủ (bug đã từng xảy ra với nút AI).
+  const lines = js.split('\n');
+  const offenders = [];
+  lines.forEach((line, idx) => {
+    const m = line.match(/method:\s*'(POST|PATCH|PUT)'/);
+    if (!m) return;
+    const window = lines.slice(idx, idx + 4).join('\n');
+    if (!window.includes('Content-Type')) offenders.push(`dòng ${idx + 1}: ${line.trim()}`);
+  });
+  assert.deepEqual(offenders, [], `thiếu header Content-Type: ${offenders.join(' | ')}`);
+});
+
+test('CSS áp dụng thuộc tính hidden (không bị display:flex đè)', () => {
+  // Regression: .offline-banner / .ai-loading dùng display:flex nên `hidden`
+  // không có tác dụng → banner offline đỏ phủ lên dashboard dù API vẫn sống.
+  assert.ok(/\[hidden\]\s*\{[^}]*display\s*:\s*none/.test(css), 'thiếu rule [hidden]{display:none}');
+});
+
 test('CSS chứa style cho các thành phần UI mới', () => {
   for (const cls of ['toast-container', '.toast', '.skeleton', '.btn-export', '.filter-select', '.sortable', '.bar-row', '.offline-banner', '.spinner', '.list-meta', '.row-actions']) {
     assert.ok(css.includes(cls), `styles.css thiếu "${cls}"`);
