@@ -90,6 +90,26 @@ fixtures/            db.baseline.json — snapshot dữ liệu demo để restor
 > dán vào [Swagger Editor](https://editor.swagger.io) để xem docs tương tác (request/response schema, enum, ví dụ).
 > CI validate spec ở mỗi push (job `openapi-spec`).
 
+### Screenshots (portal đang chạy trong Docker)
+
+![Dashboard](../docs/images/portal-dashboard.png)
+*Dashboard: 4 thẻ KPI + bảng sự cố mới nhất + thiết bị cần thu hồi.*
+
+![Tickets](../docs/images/portal-tickets.png)
+*Helpdesk Tickets: bộ lọc + nút **AI** phân tích trên mỗi dòng ticket.*
+
+![Assets](../docs/images/portal-assets.png)
+*IT Assets: tìm kiếm, lọc loại/trạng thái, xuất CSV, cấp phát/thu hồi/xóa.*
+
+![AI Analysis](../docs/images/portal-ai-analysis.png)
+*AI phân tích ticket #1001 (không có Ollama → playbook offline, engine badge rõ ràng).*
+
+![Licenses](../docs/images/portal-licenses.png)
+*Software Licenses: tổng/đã cấp/còn lại, tỷ lệ sử dụng, hạn renewal — AutoCAD 100% Hết.*
+
+![CSV Export](../docs/images/portal-csv-export.png)
+*CSV xuất ra: UTF-8 BOM, mọi ô quoted (RFC-4180), tiếng Việt nguyên vẹn.*
+
 | Method | Path | Mô tả |
 |---|---|---|
 | GET | `/api/health` | trạng thái, version, storage, số bản ghi |
