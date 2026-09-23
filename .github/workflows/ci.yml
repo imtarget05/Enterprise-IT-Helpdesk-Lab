@@ -1,0 +1,90 @@
+# =============================================================================
+#  CI — Enterprise IT Helpdesk Lab
+#
+#  3 job độc lập, chạy song song trên mỗi push/PR vào main:
+#    1. portal-tests : npm test (node:test) + test-api.sh (curl smoke, 61 case)
+#                      trên ma trận Node 18 / 20 / 22
+#    2. ps1-syntax   : parse 3 file PowerShell bằng AST parser THẬT (pwsh có sẵn
+#                      trên ubuntu-latest) qua scripts/verify-ps1-syntax.sh
+#    3. compose-config: validate docker-compose.yml + so khớp biến với .env.example
+#
+#  Không cần secret nào — mọi thứ chạy offline/local.
+# =============================================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Node test suite + REST API smoke test (curl)
+  # ---------------------------------------------------------------------------
+  portal-tests:
+    name: Portal tests (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: internal-portal
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: internal-portal/package-lock.json
+
+      - name: Install dependencies (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: Unit + integration tests (node:test)
+        run: npm test
+
+      - name: REST API smoke test (curl, 100% endpoints)
+        run: ./test-api.sh
+
+  # ---------------------------------------------------------------------------
+  # 2) PowerShell AST syntax check (không cần Windows)
+  # ---------------------------------------------------------------------------
+  ps1-syntax:
+    name: PowerShell AST syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse .ps1 bằng PowerShell AST parser
+        run: bash scripts/verify-ps1-syntax.sh
+
+  # ---------------------------------------------------------------------------
+  # 3) Validate Docker Compose config + biến môi trường
+  # ---------------------------------------------------------------------------
+  compose-config:
+    name: Docker Compose config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: docker compose config --quiet
+        run: docker compose -f internal-portal/docker-compose.yml config --quiet
+
+      - name: Kiểm tra biến interpolation có trong .env.example
+        run: bash scripts/verify-config.sh

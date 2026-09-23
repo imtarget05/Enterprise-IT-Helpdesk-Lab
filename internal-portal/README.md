@@ -20,6 +20,12 @@ Biến môi trường: `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (./data), `IT
 npm run dev        # node --watch, tự reload khi sửa code
 ```
 
+Khôi phục dữ liệu demo về trạng thái chuẩn (trước buổi demo/phỏng vấn):
+
+```bash
+cp fixtures/db.baseline.json data/db.json    # rồi khởi động lại (hoặc docker compose restart)
+```
+
 ## 2. Chạy với Docker
 
 ```bash
@@ -41,7 +47,7 @@ docker run -d -p 3000:3000 -v "$PWD/data:/app/data" --name it-portal bmc/it-asse
 
 | Lệnh | Nội dung |
 |---|---|
-| `npm test` | ~80 assertion: store/CSV/notifier unit test + integration HTTP thật trên ephemeral port + restart persistence + UI contract + PowerShell lint |
+| `npm test` | **93 test PASS**: store/CSV/notifier unit test + integration HTTP thật trên ephemeral port + restart persistence + UI contract + PowerShell lint/mutation |
 | `npm run test:api` (hoặc `./test-api.sh`) | Smoke test **curl** chạy qua **100% endpoints**, in bảng PASS/FAIL, tự boot server trên port 3210 với data tạm, exit code 0/1 |
 | `PORT=3210 ./test-api.sh` | Như trên nhưng chọn port khác |
 | `BASE_URL=http://localhost:3000 ./test-api.sh` | Đánh vào server/container **đang chạy thật** |
@@ -68,6 +74,7 @@ src/notify.js        webhook mock cho ticket High/Critical (console + data/notif
 public/              index.html · app.js · styles.css  (SPA, không build step)
 data/db.json         ← sinh tự động ở lần chạy đầu, được .gitignore
 test/                node:test suites + helpers + ps1-lint + list-routes
+fixtures/            db.baseline.json — snapshot dữ liệu demo để restore nhanh (xem fixtures/README.md)
 ```
 
 ### Persistence hoạt động thế nào
