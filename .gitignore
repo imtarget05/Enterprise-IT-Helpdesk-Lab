@@ -1,3 +1,8 @@
+# === Nội bộ — KHÔNG BAO GIỜ publish lên public repo ===
+SPEC-CLINE.md
+SPEC-KE-HOACH-AI.md
+docs/internal/
+
 # === AI agent tool state (GIU LAI TREN DIA, khong commit) ===
 .kilo/
 
