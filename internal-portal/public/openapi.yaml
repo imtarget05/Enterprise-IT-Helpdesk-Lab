@@ -45,6 +45,8 @@ tags:
     description: Bản quyền phần mềm và mức sử dụng
   - name: Notifications
     description: Lịch sử cảnh báo tự động (webhook/mock)
+  - name: AI
+    description: Trợ lý AI phân tích ticket bằng LLM chạy LOCAL qua Ollama (không dùng OpenAI) — tự fallback playbook rule-based offline
 
 paths:
   /api/health:
@@ -497,6 +499,93 @@ paths:
                     priority: High
                     alerted: true
                     at: '2026-09-23 13:45'
+  /api/ai/status:
+    get:
+      tags: [AI]
+      summary: Trạng thái trợ lý AI (LLM local qua Ollama)
+      description: |
+        Probe nhanh Ollama server (timeout 1.5s) để UI biết đang dùng **LLM local**
+        hay **playbook rule-based offline**. Endpoint luôn trả 200 — không có
+        Ollama cũng không phải lỗi (fail-soft, giống webhook alert).
+      operationId: getAiStatus
+      responses:
+        '200':
+          description: Engine đang dùng, model cấu hình và danh sách model đã tải (nếu reachable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiStatus'
+              example:
+                engine: rule-based
+                reachable: false
+                url: http://127.0.0.1:11434
+                model: qwen2.5:3b
+                models: []
+                error: 'fetch failed'
+                checkedAt: '2026-09-23 14:10'
+
+  /api/ai/analyze:
+    post:
+      tags: [AI]
+      summary: Phân tích ticket — tóm tắt, chẩn đoán, RCA, phòng ngừa
+      description: |
+        Nhận `ticketId` (ticket có sẵn trong DB) **hoặc** `title` (input tự do,
+        kèm `requester`/`dept`/`priority`/`category` tuỳ chọn).
+
+        - Ollama chạy → gọi **LLM local** (`POST /api/chat`, `format: json`) và
+          parse kết quả thành 4 phần ITIL.
+        - Ollama không chạy / timeout / JSON hỏng → **fallback playbook
+          rule-based offline** (keyword → runbook) và ghi lý do vào
+          `fallbackReason`. Vẫn trả 200.
+
+        Không dùng OpenAI hay bất kỳ cloud API nào — toàn bộ inference chạy local.
+      operationId: analyzeTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiAnalyzeInput'
+            examples:
+              byTicketId:
+                summary: Phân tích ticket có sẵn
+                value:
+                  ticketId: 1001
+              byTitle:
+                summary: Phân tích mô tả tự do (chưa tạo ticket)
+                value:
+                  title: 'Máy in offline không in được'
+                  category: Hardware
+                  priority: Medium
+      responses:
+        '200':
+          description: Kết quả phân tích (engine ollama hoặc rule-based)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiAnalysis'
+              example:
+                ticketId: 1001
+                engine: rule-based
+                model: null
+                playbook: Network — APIPA / DHCP
+                summary: Máy không nhận được IP hợp lệ từ DHCP (dấu hiệu APIPA 169.254.x.x) → mất kết nối mạng.
+                diagnosis:
+                  - ipconfig /all — kiểm tra có dải 169.254.x.x (APIPA) không
+                  - ipconfig /release && ipconfig /renew — thử xin lại IP
+                  - Ping gateway mặc định — nếu timeout, kiểm tra switch/port và cáp LAN
+                rca: Dịch vụ DHCP Server dừng/scope hết lease khiến máy không xin được IP.
+                prevention:
+                  - Theo dõi DHCP scope usage + đặt cảnh báo hết lease
+                  - Ghi lại MAC đã cấp phát, bật DHCP failover giữa 2 server
+                fallbackReason: 'fetch failed'
+                generatedAt: '2026-09-23 14:10'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+
 
 components:
   parameters:
@@ -1004,6 +1093,116 @@ components:
               message:
                 type: string
                 example: priority phải là một trong Low, Medium, High, Critical.
+
+    AiStatus:
+      type: object
+      description: Trạng thái trợ lý AI (LLM local qua Ollama)
+      required: [engine, reachable, url, model, checkedAt]
+      properties:
+        engine:
+          type: string
+          description: '`ollama` = đang dùng LLM local; `rule-based` = playbook offline'
+          enum: [ollama, rule-based]
+          example: rule-based
+        reachable:
+          type: boolean
+          example: false
+        url:
+          type: string
+          example: http://127.0.0.1:11434
+        model:
+          type: string
+          example: qwen2.5:3b
+        models:
+          type: array
+          description: Danh sách model Ollama đã tải (rỗng nếu không reachable)
+          items:
+            type: string
+          example: ['qwen2.5:3b', 'llama3.2:3b']
+        error:
+          type: string
+          nullable: true
+          description: Lý do không reachable (null khi Ollama chạy)
+          example: 'fetch failed'
+        checkedAt:
+          type: string
+          example: '2026-09-23 14:10'
+
+    AiAnalyzeInput:
+      type: object
+      description: 'Cần `ticketId` HOẶC `title` (thiếu cả hai → 400)'
+      properties:
+        ticketId:
+          type: integer
+          description: Phân tích ticket đã có trong DB (404 nếu không tồn tại)
+          example: 1001
+        title:
+          type: string
+          description: Mô tả/tiêu đề tự do khi chưa tạo ticket
+          example: Máy in offline không in được
+        requester:
+          type: string
+          example: Nguyen Thi Mai
+        dept:
+          type: string
+          example: Accounting
+        priority:
+          $ref: '#/components/schemas/Priority'
+        category:
+          type: string
+          example: Network
+
+    AiAnalysis:
+      type: object
+      description: Kết quả phân tích 4 phần ITIL (engine ollama hoặc rule-based)
+      required: [ticketId, engine, summary, diagnosis, rca, prevention, generatedAt]
+      properties:
+        ticketId:
+          type: integer
+          nullable: true
+          description: null khi phân tích từ `title` tự do
+          example: 1001
+        engine:
+          type: string
+          enum: [ollama, rule-based]
+          example: ollama
+        model:
+          type: string
+          nullable: true
+          example: qwen2.5:3b
+        playbook:
+          type: string
+          nullable: true
+          description: Tên playbook khi engine = rule-based, null khi dùng LLM
+          example: Network — APIPA / DHCP
+        summary:
+          type: string
+          example: Máy không nhận được IP hợp lệ từ DHCP (APIPA) → mất kết nối mạng.
+        diagnosis:
+          type: array
+          items:
+            type: string
+          example:
+            - ipconfig /all — kiểm tra có dải 169.254.x.x (APIPA) không
+            - ipconfig /release && ipconfig /renew — thử xin lại IP
+        rca:
+          type: string
+          example: Dịch vụ DHCP Server dừng/scope hết lease khiến máy không xin được IP.
+        prevention:
+          type: array
+          items:
+            type: string
+          example:
+            - Theo dõi DHCP scope usage + đặt cảnh báo hết lease
+            - Bật DHCP failover giữa 2 server
+        fallbackReason:
+          type: string
+          description: Chỉ có khi fallback sang rule-based (Ollama lỗi/timeout)
+          example: 'fetch failed'
+        generatedAt:
+          type: string
+          example: '2026-09-23 14:10'
+
 
   securitySchemes:
     BearerAuth:

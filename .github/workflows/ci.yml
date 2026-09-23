@@ -1,12 +1,13 @@
 # =============================================================================
 #  CI — Enterprise IT Helpdesk Lab
 #
-#  3 job độc lập, chạy song song trên mỗi push/PR vào main:
-#    1. portal-tests : npm test (node:test) + test-api.sh (curl smoke, 61 case)
+#  4 job độc lập, chạy song song trên mỗi push/PR vào main:
+#    1. portal-tests : npm test (node:test, 104 test) + test-api.sh (curl smoke, 68 case)
 #                      trên ma trận Node 18 / 20 / 22
 #    2. ps1-syntax   : parse 3 file PowerShell bằng AST parser THẬT (pwsh có sẵn
 #                      trên ubuntu-latest) qua scripts/verify-ps1-syntax.sh
 #    3. compose-config: validate docker-compose.yml + so khớp biến với .env.example
+#    4. openapi-spec  : swagger-cli validate tài liệu OpenAPI 3.1 của REST API
 #
 #  Không cần secret nào — mọi thứ chạy offline/local.
 # =============================================================================

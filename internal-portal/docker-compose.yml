@@ -26,6 +26,13 @@ services:
       DATA_DIR: ${DATA_DIR:-/app/data}
       IT_WEBHOOK_URL: ${IT_WEBHOOK_URL:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      # AI assistant — LLM LOCAL qua Ollama chạy trên máy HOST (không dùng OpenAI).
+      # Từ trong container, host.docker.internal trỏ về máy host (xem extra_hosts).
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+    extra_hosts:
+      # Cho phép container gọi Ollama trên host ở cả Linux (host-gateway).
+      - 'host.docker.internal:host-gateway'
     volumes:
       # Bind thư mục data trên host vào thư mục dữ liệu trong container.
       # DATA_HOST_PATH (host)  →  /app/data (container) — quá trình này giống Docker.

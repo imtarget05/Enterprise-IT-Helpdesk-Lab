@@ -289,6 +289,28 @@ else
 fi
 check "Server vẫn sống sau chuỗi request lỗi" 200 GET "/api/health"
 
+# ================ 7B. AI ASSISTANT (LLM LOCAL QUA OLLAMA — KHÔNG OPENAI) ================
+section "AI Assistant — phân tích ticket bằng LLM local"
+check "GET /api/ai/status → 200" 200 GET "/api/ai/status"
+TOTAL=$((TOTAL + 1))
+request GET "/api/ai/status"
+if printf '%s' "$RESPONSE" | grep -qF '"engine"'; then
+  PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}→ chứa \"engine\"${C_0}\n" "status trả về engine (ollama | rule-based)"
+else
+  FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s${C_0}\n" "status thiếu trường engine"
+fi
+check "POST analyze {ticketId:1001} → 200" 200 POST "/api/ai/analyze" '{"ticketId":1001}'
+check "POST analyze {title} tự do → 200" 200 POST "/api/ai/analyze" '{"title":"Máy in offline không in được","category":"Hardware"}'
+TOTAL=$((TOTAL + 1))
+request POST "/api/ai/analyze" '{"title":"Không đăng nhập được do tài khoản bị khóa"}'
+if printf '%s' "$RESPONSE" | grep -qF '"diagnosis"' && printf '%s' "$RESPONSE" | grep -qF '"prevention"'; then
+  PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}→ summary/diagnosis/rca/prevention${C_0}\n" "analyze trả đủ 4 phần ITIL"
+else
+  FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s${C_0}\n" "analyze thiếu diagnosis/prevention"
+fi
+check "POST analyze thiếu ticketId/title → 400" 400 POST "/api/ai/analyze" '{}'
+check "POST analyze ticketId không tồn tại → 404" 404 POST "/api/ai/analyze" '{"ticketId":424242}'
+
 # ========================= 8. GIAO DIỆN TĨNH (SPA) =========================
 section "Giao diện web & nút xuất CSV"
 check "GET / → trang dashboard" 200 GET "/"

@@ -19,6 +19,7 @@ const VERSION = packageJson.version;
 const { createStore } = require('./store');
 const { createNotifier } = require('./notify');
 const { toCsv, auditFilename, ASSET_COLUMNS } = require('./csv');
+const { createAi } = require('./ai');
 
 // --- CORS allowlist -------------------------------------------------------------------
 /** Parse chuỗi origins: ',' phân cách → mảng; nếu '*' (hoặc rỗng) → cho phép mọi origin. */
@@ -89,6 +90,10 @@ async function createApp(options = {}) {
   await store.load();
 
   const notifier = createNotifier({ dataDir, webhookUrl: options.webhookUrl });
+
+  // AI assistant — LLM LOCAL qua Ollama (không OpenAI). options.ai cho test
+  // inject fetchImpl/ollamaUrl; production đọc OLLAMA_URL/OLLAMA_MODEL.
+  const ai = createAi(options.ai || {});
 
   const app = express();
   app.disable('x-powered-by');
@@ -430,6 +435,47 @@ async function createApp(options = {}) {
     });
   });
 
+  // ================== AI ASSISTANT (LLM local qua Ollama) ==================
+  // GET /api/ai/status — probe Ollama (reachable, model, list model đã tải).
+  // Không có Ollama → engine 'rule-based', không lỗi (fail-soft như notify).
+  app.get('/api/ai/status', async (req, res, next) => {
+    try {
+      res.json(await ai.status());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/ai/analyze — body: { ticketId } HOẶC { title, ...trường khác }.
+  // Ollama chạy → LLM local phân tích (summary/diagnosis/rca/prevention);
+  // không có → playbook rule-based offline. Luôn 200 khi input hợp lệ.
+  app.post('/api/ai/analyze', async (req, res, next) => {
+    try {
+      const body = req.body || {};
+      let ticket = null;
+
+      if (body.ticketId !== undefined && body.ticketId !== null && str(body.ticketId) !== '') {
+        ticket = store.find('tickets', body.ticketId);
+        if (!ticket) throw notFound('Ticket', body.ticketId);
+      } else if (!str(body.title)) {
+        throw httpError(400, 'Thiếu dữ liệu phân tích.', ['Cần ticketId hoặc title trong body.']);
+      }
+
+      const input = ticket || {
+        title: str(body.title),
+        requester: str(body.requester),
+        dept: str(body.dept),
+        priority: PRIORITIES.includes(str(body.priority)) ? str(body.priority) : 'Medium',
+        category: str(body.category) || 'General',
+      };
+
+      const analysis = await ai.analyze(input);
+      res.json({ ticketId: ticket ? ticket.id : null, ...analysis });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // ============ 404 / 405 cho vùng /api (API contract rõ ràng) ============
   const API_ROUTES = [
     [/^\/health$/, ['GET']],
@@ -443,6 +489,8 @@ async function createApp(options = {}) {
     [/^\/tickets\/[^/]+$/, ['GET']],
     [/^\/licenses$/, ['GET']],
     [/^\/licenses\/[^/]+$/, ['GET']],
+    [/^\/ai\/status$/, ['GET']],
+    [/^\/ai\/analyze$/, ['POST']],
     [/^\/notifications$/, ['GET']],
   ];
 

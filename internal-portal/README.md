@@ -5,6 +5,7 @@
 - **Backend:** Node.js 18+/22, Express 4, CORS — persistence file JSON nguyên tử, **0 dependency native**.
 - **Frontend:** SPA một trang (`public/`) — vanilla JS, dark mode, toast, skeleton, sort/filter, xuất CSV.
 - **Kiểm thử:** `node:test` (unit + integration HTTP thật) và `test-api.sh` (curl) phủ **100% REST endpoints**.
+- **AI Assistant:** phân tích ticket bằng **LLM chạy LOCAL qua Ollama** (không dùng OpenAI) — tự fallback playbook rule-based offline.
 - **Đóng gói:** Dockerfile multi-stage (non-root, healthcheck) + `docker-compose.yml`.
 
 ## 1. Chạy nhanh
@@ -14,7 +15,8 @@ npm install
 npm start          # → http://localhost:3000
 ```
 
-Biến môi trường: `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (./data), `IT_WEBHOOK_URL` (tuỳ chọn).
+Biến môi trường: `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (./data), `IT_WEBHOOK_URL` (tuỳ chọn),
+`OLLAMA_URL` (`http://127.0.0.1:11434`), `OLLAMA_MODEL` (`qwen2.5:3b`) — cho trợ lý AI local.
 
 ```bash
 npm run dev        # node --watch, tự reload khi sửa code
@@ -47,7 +49,7 @@ docker run -d -p 3000:3000 -v "$PWD/data:/app/data" --name it-portal bmc/it-asse
 
 | Lệnh | Nội dung |
 |---|---|
-| `npm test` | **93 test PASS**: store/CSV/notifier unit test + integration HTTP thật trên ephemeral port + restart persistence + UI contract + PowerShell lint/mutation |
+| `npm test` | **104 test PASS**: store/CSV/notifier unit test + integration HTTP thật trên ephemeral port + restart persistence + UI contract + AI assistant (Ollama giả lập + fallback offline) + PowerShell lint/mutation |
 | `npm run test:api` (hoặc `./test-api.sh`) | Smoke test **curl** chạy qua **100% endpoints**, in bảng PASS/FAIL, tự boot server trên port 3210 với data tạm, exit code 0/1 |
 | `PORT=3210 ./test-api.sh` | Như trên nhưng chọn port khác |
 | `BASE_URL=http://localhost:3000 ./test-api.sh` | Đánh vào server/container **đang chạy thật** |
@@ -56,8 +58,8 @@ docker run -d -p 3000:3000 -v "$PWD/data:/app/data" --name it-portal bmc/it-asse
 Ví dụ kết thúc của `test-api.sh`:
 
 ```
-  Tổng số kiểm tra : 61
-  PASS            : 61
+  Tổng số kiểm tra : 68
+  PASS            : 68
   FAIL            : 0
   Tỷ lệ đạt       : 100.0%
 ```
@@ -103,6 +105,8 @@ fixtures/            db.baseline.json — snapshot dữ liệu demo để restor
 | PATCH | `/api/tickets/:id/status` | Open → In Progress → Resolved/Closed (+ `resolvedAt`) |
 | GET | `/api/licenses` `/api/licenses/:id` | bản quyền + `utilizationPercent` |
 | GET | `/api/notifications` | hàng đợi cảnh báo đã gửi (`?limit=`) |
+| GET | `/api/ai/status` | trạng thái trợ lý AI: engine `ollama` hay `rule-based`, model, list model đã tải |
+| POST | `/api/ai/analyze` | phân tích ticket (`{ticketId}` hoặc `{title,...}`) → summary/diagnosis/rca/prevention; fallback rule-based khi Ollama không chạy |
 | * | sai đường dẫn/`/api/*` | 404 JSON; sai method → 405 + `Allow` |
 
 ### Webhook alert (mock → thật)
@@ -112,6 +116,22 @@ Trỏ vào Slack/Teams/Mattermost thật:
 ```bash
 IT_WEBHOOK_URL="https://hooks.slack.com/services/XXX/YYY/ZZZ" npm start
 ```
+
+### 🤖 AI Assistant — LLM local (Ollama, **không dùng OpenAI**)
+
+```bash
+ollama pull qwen2.5:3b        # hoặc llama3.2:3b
+ollama serve                  # http://127.0.0.1:11434
+OLLAMA_URL=http://127.0.0.1:11434 npm start
+curl -s localhost:3000/api/ai/status
+curl -s -X POST localhost:3000/api/ai/analyze -H 'Content-Type: application/json' -d '{"ticketId":1001}'
+```
+
+- `GET /api/ai/status` → engine `ollama` (reachable) hay `rule-based` (offline) + list model đã tải.
+- `POST /api/ai/analyze` → `{ticketId}` (404 nếu không tồn tại) hoặc `{title, requester?, dept?, priority?, category?}` (thiếu cả hai → 400).
+- Kết quả 4 phần ITIL: `summary`, `diagnosis[]`, `rca`, `prevention[]` + `engine`, `playbook`, `fallbackReason`, `generatedAt`.
+- Ollama không chạy / timeout / JSON hỏng → **fail-soft** sang playbook rule-based offline ([`src/ai-playbooks.js`](src/ai-playbooks.js)), endpoint vẫn 200.
+- UI: tab Helpdesk Tickets → nút **🤖 AI** trên mỗi ticket (modal hiển thị đủ 4 phần).
 
 ## 5. Ghi chú nghiệp vụ (ITIL)
 - Vòng đời tài sản: `Active ⇄ In Storage`, `Maintenance`, `Retired`; nút **Cấp phát / Thu hồi** trên bảng.

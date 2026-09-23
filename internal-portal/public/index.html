@@ -377,6 +377,39 @@
     </div>
   </div>
 
+  <!-- Modal AI Phân Tích Ticket (LLM local qua Ollama — không OpenAI) -->
+  <div id="ai-modal" class="modal">
+    <div class="modal-content ai-modal-content">
+      <div class="ai-modal-head">
+        <h3>🤖 AI Phân Tích Ticket <span id="ai-engine" class="badge badge-blue"></span></h3>
+        <button type="button" class="link-btn" id="btn-close-ai-modal" aria-label="Đóng">✕ Đóng</button>
+      </div>
+      <div id="ai-loading" class="ai-loading" hidden>
+        <span class="spinner" aria-hidden="true"></span> Đang phân tích bằng model local (Ollama)…
+      </div>
+      <div id="ai-body" class="ai-body" hidden>
+        <section class="ai-section">
+          <h4>📝 Tóm tắt sự cố</h4>
+          <p id="ai-summary"></p>
+        </section>
+        <section class="ai-section">
+          <h4>🩺 Các bước chẩn đoán</h4>
+          <ol id="ai-diagnosis"></ol>
+        </section>
+        <section class="ai-section">
+          <h4>🎯 Nguyên nhân gốc (Root Cause)</h4>
+          <p id="ai-rca"></p>
+        </section>
+        <section class="ai-section">
+          <h4>🛡️ Biện pháp phòng ngừa</h4>
+          <ul id="ai-prevention"></ul>
+        </section>
+        <p class="ai-meta" id="ai-meta"></p>
+      </div>
+      <div id="ai-error" class="ai-error" hidden></div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
   <script>
     (function () {

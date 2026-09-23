@@ -245,7 +245,10 @@ function setupModals() {
   $('btn-add-ticket').onclick = () => open(ticketModal);
   $('btn-close-ticket-modal').onclick = () => close(ticketModal);
 
-  [assetModal, ticketModal].forEach((modal) =>
+  const aiModal = $('ai-modal');
+  $('btn-close-ai-modal').onclick = () => close(aiModal);
+
+  [assetModal, ticketModal, aiModal].forEach((modal) =>
     modal.addEventListener('click', (e) => {
       if (e.target === modal) close(modal);
     })
@@ -254,6 +257,7 @@ function setupModals() {
     if (e.key === 'Escape') {
       close(assetModal);
       close(ticketModal);
+      close(aiModal);
     }
   });
 
@@ -521,10 +525,53 @@ function renderTicketRows() {
         <td>${escapeHtml(t.category)}</td>
         <td class="cell-time">${escapeHtml(t.createdAt)}</td>
         <td><span class="badge ${STATUS_BADGE[t.status] || 'badge-blue'}">${escapeHtml(t.status)}</span></td>
-        <td class="row-actions">${action}</td>
+        <td class="row-actions"><button class="btn btn-sm btn-ai" onclick="analyzeTicket(${t.id})" title="Phân tích bằng AI local (Ollama) — tóm tắt, chẩn đoán, RCA">🤖 AI</button>${action}</td>
       </tr>`;
     })
     .join('');
+}
+
+/**
+ * AI Phân Tích Ticket — gọi POST /api/ai/analyze (LLM LOCAL qua Ollama,
+ * fallback playbook rule-based khi model không khả dụng). Render kết quả
+ * 4 phần ITIL vào modal #ai-modal.
+ */
+async function analyzeTicket(id) {
+  const modal = $('ai-modal');
+  const loading = $('ai-loading');
+  const body = $('ai-body');
+  const errBox = $('ai-error');
+  if (!modal) return;
+
+  modal.classList.add('show');
+  loading.hidden = false;
+  body.hidden = true;
+  errBox.hidden = true;
+
+  try {
+    const data = await apiJson('/api/ai/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ ticketId: id }),
+    });
+
+    $('ai-engine').textContent =
+      data.engine === 'ollama' ? `LLM local · ${data.model}` : `Playbook offline${data.playbook ? ' · ' + data.playbook : ''}`;
+    $('ai-engine').className = `badge ${data.engine === 'ollama' ? 'badge-blue' : 'badge-orange'}`;
+    $('ai-summary').textContent = data.summary;
+    $('ai-diagnosis').innerHTML = (data.diagnosis || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('');
+    $('ai-rca').textContent = data.rca;
+    $('ai-prevention').innerHTML = (data.prevention || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('');
+    $('ai-meta').textContent =
+      `engine: ${data.engine}` +
+      (data.fallbackReason ? ` · fallback: ${data.fallbackReason}` : '') +
+      ` · tạo lúc ${data.generatedAt}`;
+    body.hidden = false;
+  } catch (err) {
+    errBox.textContent = err && err.message ? err.message : 'Không phân tích được ticket.';
+    errBox.hidden = false;
+  } finally {
+    loading.hidden = true;
+  }
 }
 
 async function fetchLicenses() {

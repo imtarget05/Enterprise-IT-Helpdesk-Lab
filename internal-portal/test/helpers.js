@@ -11,14 +11,14 @@ const path = require('node:path');
 
 const { createApp } = require('../src/app');
 
-async function createTestClient() {
+async function createTestClient(options = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'portal-test-'));
   let server;
   let baseUrl;
   let context;
 
   async function start() {
-    context = await createApp({ dataDir });
+    context = await createApp({ dataDir, ...options });
     await new Promise((resolve) => {
       server = context.app.listen(0, '127.0.0.1', resolve);
     });

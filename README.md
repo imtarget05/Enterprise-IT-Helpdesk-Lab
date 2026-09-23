@@ -15,7 +15,7 @@
 </div>
 
 > ### TL;DR (English)
-> A hands-on **enterprise IT lab on Windows Server 2022** (AD DS, DNS, DHCP, GPO, File Server/NTFS, Shadow Copies) with **20 ITIL incident tickets** (each one documented as *symptom → diagnosis → root cause → resolution → prevention*), **3 production-grade PowerShell automation scripts** verified by the **real PowerShell AST parser**, and a **full-stack Internal IT Asset & Helpdesk Portal** — Node.js/Express REST API, atomic JSON persistence (no external DB), CSV audit export that opens cleanly in Excel (UTF-8 BOM), Docker multi-stage image running as non-root with healthcheck, and a test suite of **93 unit/integration tests + 61 curl API tests** that all run green in CI.
+> A hands-on **enterprise IT lab on Windows Server 2022** (AD DS, DNS, DHCP, GPO, File Server/NTFS, Shadow Copies) with **20 ITIL incident tickets** (each one documented as *symptom → diagnosis → root cause → resolution → prevention*), **3 production-grade PowerShell automation scripts** verified by the **real PowerShell AST parser**, and a **full-stack Internal IT Asset & Helpdesk Portal** — Node.js/Express REST API, atomic JSON persistence (no external DB), CSV audit export that opens cleanly in Excel (UTF-8 BOM), Docker multi-stage image running as non-root with healthcheck, and a test suite of **104 unit/integration tests + 68 curl API tests** that all run green in CI, plus an **AI assistant that runs a LOCAL LLM via Ollama (no OpenAI/cloud API)** with automatic offline rule-based fallback.
 > Built to mirror the daily workload of an **IT Helpdesk / IT Support / Internal IT / Junior SysAdmin** role.
 
 ---
@@ -60,8 +60,8 @@ open http://localhost:3000      # Linux: xdg-open
 
 ```bash
 cd internal-portal
-npm test                              # 93 unit + integration test (node:test)
-./test-api.sh                         # 61 curl test phủ 100% REST endpoints
+npm test                              # 104 unit + integration test (node:test)
+./test-api.sh                         # 68 curl test phủ 100% REST endpoints
 bash ../scripts/verify-ps1-syntax.sh  # parse 3 file .ps1 bằng AST parser thật
 ```
 
@@ -122,9 +122,10 @@ cp fixtures/db.baseline.json data/db.json
 | **Troubleshooting có kỷ luật** | 20 ticket theo khung ITIL: symptom → diagnosis → RCA → resolution → prevention, kèm command/log thật |
 | **PowerShell automation** | 3 script AD/asset/network + linter tĩnh + **AST parser PowerShell thật** trong CI ([`scripts/`](scripts/)) |
 | **Lập trình phần mềm nội bộ** | Portal Node.js/Express: REST API đầy đủ, validation 400/404/409/422, 405 + header `Allow`, error handler tập trung ([`internal-portal/src/app.js`](internal-portal/src/app.js)) |
+| **AI local (không dùng OpenAI)** | Trợ lý AI phân tích ticket bằng **LLM chạy local qua Ollama** (`POST /api/ai/analyze` → tóm tắt · chẩn đoán · RCA · phòng ngừa), **tự fallback playbook rule-based offline** khi model không chạy — test bằng fetch giả lập nên CI không cần cài Ollama ([`internal-portal/src/ai.js`](internal-portal/src/ai.js)) |
 | **Dữ liệu & bền vững** | JSON store ghi **atomic (tmp → rename)**, corrupt-safe (đổi tên file hỏng rồi seed lại), graceful shutdown ([`internal-portal/src/store.js`](internal-portal/src/store.js)) |
 | **Report cho phòng ban khác** | Xuất CSV RFC-4180 + UTF-8 BOM để Kế toán/Tài sản mở bằng Excel không lỗi font ([`internal-portal/src/csv.js`](internal-portal/src/csv.js)) |
-| **Kiểm thử & CI** | 93 unit/integration test + 61 curl test + GitHub Actions (Node 18/20/22, AST PowerShell, compose config) |
+| **Kiểm thử & CI** | 104 unit/integration test + 68 curl test + GitHub Actions (Node 18/20/22, AST PowerShell, compose config, OpenAPI spec) |
 | **Bảo mật vận hành** | Container non-root, `read_only`, `cap_drop: ALL`, `no-new-privileges`, log rotation, healthcheck |
 
 ---
@@ -136,6 +137,7 @@ cp fixtures/db.baseline.json data/db.json
 | Hạ tầng lab | VMware / VirtualBox · Windows Server 2022 Datacenter (AD DS, DNS, DHCP, GPO, File Server) · Windows 11 Pro |
 | Tự động hóa | PowerShell 5.1 / 7.x (ActiveDirectory, CIM/WMI, NetTCPIP module) |
 | Backend | Node.js 18/20/22 · Express 4 · CORS · `node:test` (không framework ngoài) |
+| AI (local) | **Ollama** — LLM chạy trên máy (`qwen2.5:3b` mặc định), không dùng OpenAI/cloud API; fallback playbook rule-based offline trong [`src/ai-playbooks.js`](internal-portal/src/ai-playbooks.js) |
 | Frontend | HTML5 · CSS3 (dark mode, responsive) · Vanilla JavaScript (không build step) |
 | Lưu trữ | JSON file store tự viết: atomic write, corrupt-safe, promise-chain serialize |
 | Đóng gói | Docker multi-stage (node:20-alpine, non-root) · Docker Compose v2 |
@@ -269,7 +271,39 @@ docker compose restart                    # kiểm chứng persistence: dữ li�
 ```
 
 Biến môi trường (xem [`internal-portal/.env.example`](internal-portal/.env.example)):
-`PORT` (3000) · `HOST` (0.0.0.0) · `DATA_DIR` (./data) · `IT_WEBHOOK_URL` (tuỳ chọn) · `ALLOWED_ORIGINS` (*).
+`PORT` (3000) · `HOST` (0.0.0.0) · `DATA_DIR` (./data) · `IT_WEBHOOK_URL` (tuỳ chọn) · `ALLOWED_ORIGINS` (*) ·
+`OLLAMA_URL` (`http://127.0.0.1:11434`) · `OLLAMA_MODEL` (`qwen2.5:3b`) — cho trợ lý AI local.
+
+### 🤖 AI Assistant — LLM local (Ollama, **không dùng OpenAI**)
+
+Portal có trợ lý AI phân tích ticket: **tóm tắt → các bước chẩn đoán → RCA → phòng ngừa**
+(`POST /api/ai/analyze`). Toàn bộ inference chạy **trên máy**, không gọi OpenAI hay cloud API nào.
+
+```bash
+# 1) Cài Ollama + tải model local (~2 GB cho qwen2.5:3b)
+brew install ollama || curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen2.5:3b
+ollama serve                               # http://127.0.0.1:11434
+
+# 2) Khởi động portal (đọc OLLAMA_URL/OLLAMA_MODEL từ env)
+cd internal-portal && OLLAMA_URL=http://127.0.0.1:11434 OLLAMA_MODEL=qwen2.5:3b npm start
+
+curl -s localhost:3000/api/ai/status                            # → engine: "ollama"
+curl -s -X POST localhost:3000/api/ai/analyze \
+  -H 'Content-Type: application/json' -d '{"ticketId":1001}'    # → summary/diagnosis/rca/prevention
+```
+
+Trên UI: tab **Helpdesk Tickets** → nút **🤖 AI** ở mỗi dòng ticket.
+
+| Tình huống | Hành vi |
+|---|---|
+| Ollama chạy | `engine: "ollama"` — LLM local sinh 4 phần ITIL, JSON được parse tolerant (`format: json` + cắt `{…}` nếu model bọc markdown) |
+| Ollama chưa cài / tắt / timeout | `engine: "rule-based"` + `fallbackReason` — dùng **playbook offline** (keyword → runbook theo 8 nhóm sự cố: APIPA/DHCP, DNS, AD lockout, File Server, máy in, bảo mật, phần cứng, phần mềm). Endpoint **vẫn 200**, demo không phụ thuộc mạng |
+| Model trả JSON hỏng | Fail-soft: parse lỗi → tự chuyển rule-based, không bao giờ 500 |
+
+> CI không cần cài Ollama: test inject `fetchImpl` giả lập (nhánh LLM) và trỏ `OLLAMA_URL`
+> vào port chết (nhánh fallback) nên kết quả tất định — xem
+> [`internal-portal/test/api-ai.test.js`](internal-portal/test/api-ai.test.js).
 
 ---
 
@@ -277,16 +311,17 @@ Biến môi trường (xem [`internal-portal/.env.example`](internal-portal/.env
 
 | Lệnh | Nội dung | Kết quả |
 |---|---|---|
-| `npm test` (trong `internal-portal/`) | 93 test `node:test`: store atomic/corrupt-safe, CSV escaping + BOM, notifier, integration HTTP thật trên ephemeral port, persistence qua restart, UI contract, linter + mutation test PowerShell | **93/93 PASS** |
-| `./test-api.sh` | Smoke test **curl** phủ **100% REST endpoints**, tự boot server ở port riêng với data tạm, in bảng PASS/FAIL, exit code 0/1 | **61/61 PASS (100%)** |
+| `npm test` (trong `internal-portal/`) | 104 test `node:test`: store atomic/corrupt-safe, CSV escaping + BOM, notifier, integration HTTP thật trên ephemeral port, persistence qua restart, UI contract, AI assistant (Ollama giả lập + fallback), linter + mutation test PowerShell | **104/104 PASS** |
+| `./test-api.sh` | Smoke test **curl** phủ **100% REST endpoints**, tự boot server ở port riêng với data tạm, in bảng PASS/FAIL, exit code 0/1 | **68/68 PASS (100%)** |
 | `bash scripts/verify-ps1-syntax.sh` | Parse 3 file `.ps1` bằng **AST parser PowerShell thật** | **3/3 file sạch** |
 | `bash scripts/verify-config.sh` | Validate compose + kiểm tra interpolation biến, healthcheck, `cap_drop`, `read_only`, log rotation, restart policy | **Toàn bộ ✅** |
 
-**GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) chạy trên mỗi push/PR vào `main`, gồm 3 job song song:
+**GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) chạy trên mỗi push/PR vào `main`, gồm 4 job song song:
 
 1. `portal-tests` — ma trận **Node 18 / 20 / 22**: `npm ci` → `npm test` → `./test-api.sh`
 2. `ps1-syntax` — parse AST 3 script PowerShell (không cần Windows)
 3. `compose-config` — `docker compose config --quiet` + đối chiếu biến với `.env.example`
+4. `openapi-spec` — `swagger-cli validate` tài liệu OpenAPI 3.1 (`internal-portal/public/openapi.yaml`)
 
 > Badge CI ở đầu README phản ánh trạng thái thật của lần chạy mới nhất trên `main`.
 
