@@ -201,6 +201,8 @@ function setupNavigation() {
     'tab-assets': 'Quản Lý Thiết Bị CNTT (IT Asset Management)',
     'tab-tickets': 'Quản Lý Phiếu Hỗ Trợ Kỹ Thuật (Helpdesk Tickets)',
     'tab-licenses': 'Quản Lý Bản Quyền Phần Mềm (Software Licenses)',
+    'tab-operations': 'Vận Hành Nhà Máy (Factory Operations)',
+    'tab-runbooks': 'Runbooks & Hướng Dẫn Vận Hành',
   };
 
   const activate = (tabId) => {
@@ -323,7 +325,45 @@ function setupModals() {
 }
 
 
-// ----------------------------- Data --------------------------------
+async function fetchOperations() {
+  const load = async (path) => {
+    try { return await apiJson(path); } catch (err) { console.warn(`[operations] ${path}: ${err.message}`); return null; }
+  };
+  const [monitoring, problems, changes, access, audit] = await Promise.all([
+    load('/api/monitoring/status'), load('/api/problems'), load('/api/changes'),
+    load('/api/access-requests'), load('/api/audit'),
+  ]);
+
+  const checks = monitoring?.checks || [];
+  if ($('ops-monitoring-count')) $('ops-monitoring-count').textContent = checks.length;
+  if ($('ops-monitoring-detail')) $('ops-monitoring-detail').textContent = `${monitoring?.up || 0} UP • ${monitoring?.degraded || 0} degraded • ${monitoring?.down || 0} down`;
+  $('operations-monitoring-list').innerHTML = checks.length ? checks.slice(0, 8).map((check) => `
+    <div class="ticket-item operations-list-item">
+      <div><strong>${escapeHtml(check.name)}</strong><p class="item-sub">${escapeHtml(check.type)} • ${escapeHtml(check.target)}</p></div>
+      <span class="badge ${check.status === 'UP' ? 'badge-green' : check.status === 'DEGRADED' ? 'badge-orange' : 'badge-red'}">${escapeHtml(check.status)}</span>
+    </div>`).join('') : '<p class="text-muted pad">Chưa có monitoring check.</p>';
+
+  const problemRows = Array.isArray(problems) ? problems : [];
+  const changeRows = Array.isArray(changes) ? changes : [];
+  if ($('ops-itsm-count')) $('ops-itsm-count').textContent = problemRows.length + changeRows.length;
+  if ($('ops-itsm-detail')) $('ops-itsm-detail').textContent = `${problemRows.filter((row) => !['CLOSED', 'RESOLVED'].includes(String(row.status).toUpperCase())).length} problem đang mở`;
+  const itsmMarkup = problemRows.slice(0, 6).map((row) => `<div class="ticket-item operations-list-item"><div><strong>#${escapeHtml(row.id)} ${escapeHtml(row.title)}</strong><p class="item-sub">Problem • ${escapeHtml(row.status)}</p></div><span class="badge badge-blue">Problem</span></div>`).join('')
+    + changeRows.slice(0, 4).map((row) => `<div class="ticket-item operations-list-item"><div><strong>#${escapeHtml(row.id)} ${escapeHtml(row.title)}</strong><p class="item-sub">Change • ${escapeHtml(row.implementationState || row.status)}</p></div><span class="badge badge-orange">Change</span></div>`).join('');
+  $('operations-itsm-list').innerHTML = itsmMarkup || '<p class="text-muted pad">Chưa có problem/change record.</p>';
+
+  const accessRows = Array.isArray(access) ? access : [];
+  if ($('ops-access-count')) $('ops-access-count').textContent = accessRows.length;
+  if ($('ops-access-detail')) $('ops-access-detail').textContent = `${accessRows.filter((row) => row.executionState !== 'COMPLETED').length} chờ xử lý`;
+  const auditRows = Array.isArray(audit?.items) ? audit.items : [];
+  const accessMarkup = accessRows.slice(0, 8).map((row) => `<div class="ticket-item operations-list-item"><div><strong>${escapeHtml(row.employeeId)} • ${escapeHtml(row.name)}</strong><p class="item-sub">${escapeHtml(row.requestType)} • ${escapeHtml(row.executionState)}</p></div><span class="badge ${row.executionState === 'COMPLETED' ? 'badge-green' : 'badge-orange'}">${escapeHtml(row.executionState)}</span></div>`).join('')
+    + (auditRows.length ? `<div class="list-divider">Audit gần đây</div>${auditRows.slice(0, 4).map((row) => `<div class="ticket-item operations-list-item"><div><strong>${escapeHtml(row.action)}</strong><p class="item-sub">${escapeHtml(row.actor)} • ${escapeHtml(row.at)}</p></div><span class="badge">${escapeHtml(row.entityType)}</span></div>`).join('')}` : '');
+  $('operations-access-list').innerHTML = accessMarkup || '<p class="text-muted pad">Chưa có access request.</p>';
+}
+
+function renderOperations() {
+  return fetchOperations();
+}
+
 async function fetchStats() {
   try {
     const data = await apiJson('/api/dashboard/stats');
@@ -757,13 +797,21 @@ function setupToolbar() {
   $('btn-refresh-assets').onclick = async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
-    await Promise.all([fetchStats(), fetchAssets(), fetchTickets(), fetchLicenses(), fetchAlerts()]);
+    await Promise.all([fetchStats(), fetchAssets(), fetchTickets(), fetchLicenses(), fetchAlerts(), fetchOperations()]);
     btn.disabled = false;
     toast('Đã đồng bộ lại dữ liệu từ máy chủ.', 'info', 2200);
   };
 
+  const operationsRefresh = $('btn-refresh-operations');
+  if (operationsRefresh) operationsRefresh.onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    await fetchOperations();
+    e.currentTarget.disabled = false;
+    toast('Đã làm mới trạng thái vận hành.', 'info', 2200);
+  };
+
   const retry = $('btn-retry-connection');
-  if (retry) retry.onclick = () => Promise.all([fetchStats(), fetchAssets(), fetchTickets(), fetchLicenses()]);
+  if (retry) retry.onclick = () => Promise.all([fetchStats(), fetchAssets(), fetchTickets(), fetchLicenses(), fetchOperations()]);
 
   const wireSort = (tableId, stateKey, rerender) => {
     const table = $(tableId);
@@ -795,6 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchTickets();
   fetchLicenses();
   fetchAlerts();
+  fetchOperations();
 
   const clock = $('clock');
   setInterval(() => {

@@ -6,6 +6,9 @@ docs/internal/
 # === AI agent tool state (GIU LAI TREN DIA, khong commit) ===
 .kilo/
 
+# === Generated verification evidence (chạy lại bằng scripts/collect-factory-evidence.sh) ===
+artifacts/
+
 # === OS / editor ===
 .DS_Store
 .localized

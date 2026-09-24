@@ -4,8 +4,11 @@
 
 - **Backend:** Node.js 18+/22, Express 4, CORS — persistence file JSON nguyên tử, **0 dependency native**.
 - **Frontend:** SPA một trang (`public/`) — vanilla JS, dark mode, toast, skeleton, sort/filter, xuất CSV.
-- **Kiểm thử:** `node:test` (unit + integration HTTP thật) và `test-api.sh` (curl) phủ **100% REST endpoints**.
-- **AI Assistant:** phân tích ticket bằng **LLM chạy LOCAL qua Ollama** (không dùng OpenAI) — tự fallback playbook rule-based offline.
+- **Kiểm thử:** `160` test Node (`node:test`) + route inventory `55` route; `test-api.sh` chạy `68` smoke checks cho baseline REST, còn factory routes có integration tests riêng.
+- **Factory Operations:** 5 runbook (VLAN/firewall, AD/identity, monitoring, backup/DR, MiniERP) + 12 scenario có cấu trúc Mục tiêu/Điều kiện/Thao tác/Kết quả/Evidence.
+- **API contract:** `public/openapi.yaml` mô tả auth, ITSM, monitoring, MiniERP và audit; CI validate bằng `swagger-cli`.
+- **Evidence:** `artifacts/factory-it-upgrade/final/` chứa inventory, logs, scenario matrix và manifest (không chứa secret).
+- **Bảo mật:** lab auth dùng Bearer session/RBAC; `AUTH_MODE=lab`, `LAB_AUTH_USERS` và `MINIERP_INTEGRATION_KEY` chỉ nạp qua test/environment.
 - **Đóng gói:** Dockerfile multi-stage (non-root, healthcheck) + `docker-compose.yml`.
 
 ## 1. Chạy nhanh
@@ -16,6 +19,7 @@ npm start          # → http://localhost:3000
 ```
 
 Biến môi trường: `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (./data), `IT_WEBHOOK_URL` (tuỳ chọn),
+`AUTH_MODE` (`legacy` hoặc `lab`), `LAB_AUTH_USERS` (JSON chỉ dùng lab/test), `MINIERP_INTEGRATION_KEY` (key riêng cho receiver),
 `OLLAMA_URL` (`http://127.0.0.1:11434`), `OLLAMA_MODEL` (`qwen2.5:3b`) — cho trợ lý AI local.
 
 ```bash
@@ -38,22 +42,21 @@ docker compose restart             # dữ liệu VẪN CÒN (persistence qua vol
 docker compose down
 ```
 
-Không dùng compose:
-
+Không dùng compose (chạy từ repository root):
 ```bash
-docker build -t bmc/it-asset-helpdesk-portal:2.0.0 .
-docker run -d -p 3000:3000 -v "$PWD/data:/app/data" --name it-portal bmc/it-asset-helpdesk-portal:2.0.0
+docker build -f internal-portal/Dockerfile -t bmc/it-asset-helpdesk-portal:2.0.0 .
+docker run -d -p 3000:3000 -v "$PWD/internal-portal/data:/app/data" --name it-portal bmc/it-asset-helpdesk-portal:2.0.0
 ```
 
 ## 3. Kiểm thử tự động
 
 | Lệnh | Nội dung |
 |---|---|
-| `npm test` | **104 test PASS**: store/CSV/notifier unit test + integration HTTP thật trên ephemeral port + restart persistence + UI contract + AI assistant (Ollama giả lập + fallback offline) + PowerShell lint/mutation |
-| `npm run test:api` (hoặc `./test-api.sh`) | Smoke test **curl** chạy qua **100% endpoints**, in bảng PASS/FAIL, tự boot server trên port 3210 với data tạm, exit code 0/1 |
+| `npm test` | **160 test PASS**: store/CSV/notifier, integration HTTP thật, persistence, UI/API contract, ITSM/RBAC/monitoring/MiniERP, static docs mounts, Docker packaging và PowerShell lint/mutation |
+| `npm run test:api` (hoặc `./test-api.sh`) | Smoke test **curl** gồm `68` check baseline REST, in bảng PASS/FAIL, tự boot server trên port riêng với data tạm, exit code 0/1 |
 | `PORT=3210 ./test-api.sh` | Như trên nhưng chọn port khác |
 | `BASE_URL=http://localhost:3000 ./test-api.sh` | Đánh vào server/container **đang chạy thật** |
-| `bash scripts/verify-ps1-syntax.sh` | Parse 3 file `.ps1` bằng AST parser PowerShell thật (dùng pwsh local hoặc Docker) |
+| `bash scripts/verify-ps1-syntax.sh` | Parse **8** file `.ps1` bằng AST parser PowerShell thật (dùng pwsh local hoặc Docker); nếu thiếu runner, dùng fallback npm test |
 
 Ví dụ kết thúc của `test-api.sh`:
 
@@ -74,6 +77,10 @@ src/seed.js          dữ liệu mẫu doanh nghiệp (6 assets, 6 tickets ITIL,
 src/csv.js           toCsv() RFC-4180 + UTF-8 BOM (mở Excel không lỗi font Việt) + auditFilename()
 src/notify.js        webhook mock cho ticket High/Critical (console + data/notifications.log + POST thật nếu cấu hình)
 public/              index.html · app.js · styles.css  (SPA, không build step)
+src/auth.js          Bearer session map + RBAC permission matrix
+src/itsm.js          priority/SLA, canonical state, normalization/sanitize helpers
+src/enterprise-routes.js  ITSM, monitoring, MiniERP, audit và access lifecycle routes
+src/backup.js        backup/restore JSON + SHA-256 helpers
 data/db.json         ← sinh tự động ở lần chạy đầu, được .gitignore
 test/                node:test suites + helpers + ps1-lint + list-routes
 fixtures/            db.baseline.json — snapshot dữ liệu demo để restore nhanh (xem fixtures/README.md)

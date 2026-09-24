@@ -36,7 +36,12 @@ MANAGEMENT=0
 
 cleanup() {
   if [ "$MANAGEMENT" = "1" ] && [ -n "$SERVER_PID" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
-    kill "$SERVER_PID" 2>/dev/null
+    kill "$SERVER_PID" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+      kill -0 "$SERVER_PID" 2>/dev/null || break
+      sleep 0.1
+    done
+    kill -9 "$SERVER_PID" 2>/dev/null || true
   fi
   rm -f "$BODY_FILE"
   [ "$KEEP_DATA" = "1" ] || rm -rf "$OUT_DIR"
@@ -57,9 +62,12 @@ if [ -z "$BASE_URL" ]; then
   DATA_DIR="$OUT_DIR/data"
   mkdir -p "$DATA_DIR"
   printf "${C_D}>> Đang khởi động server trên port %s (DATA_DIR tạm: %s)...${C_0}\n" "$PORT" "$DATA_DIR"
-  ( cd "$SCRIPT_DIR" && PORT="$PORT" HOST=127.0.0.1 DATA_DIR="$DATA_DIR" node server.js > "$OUT_DIR/server.log" 2>&1 & echo $! > "$OUT_DIR/server.pid" )
+  (
+    cd "$SCRIPT_DIR" || exit 1
+    exec env PORT="$PORT" HOST=127.0.0.1 DATA_DIR="$DATA_DIR" node server.js
+  ) > "$OUT_DIR/server.log" 2>&1 &
+  SERVER_PID=$!
   MANAGEMENT=1
-  SERVER_PID="$(cat "$OUT_DIR/server.pid")"
 
   READY=0
   for _ in $(seq 1 40); do
@@ -110,7 +118,7 @@ check_body() {
   local desc="$1" needle="$2" method="$3" path="$4"
   TOTAL=$((TOTAL + 1))
   request "$method" "$path"
-  if printf '%s' "$RESPONSE" | grep -qF -- "$needle"; then
+  if grep -Fq -- "$needle" <<< "$RESPONSE"; then
     PASS=$((PASS + 1))
     printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}%s %-8s${C_0} ${C_D}→ chứa \"%s\"${C_0}\n" "$desc" "$method" "$path" "$needle"
   else
@@ -183,14 +191,14 @@ TOTAL=$((TOTAL + 1))
 HTTP=$(curl -s -D "$OUT_DIR/csv.headers" -o "$CSV_FILE" -w '%{http_code}' "$BASE_URL/api/assets/export.csv")
 CT=$(grep -i '^content-type:' "$OUT_DIR/csv.headers" | tr -d '\r')
 CD=$(grep -i '^content-disposition:' "$OUT_DIR/csv.headers" | tr -d '\r')
-if [ "$HTTP" = "200" ] && printf '%s' "$CT" | grep -qi 'text/csv'; then
+if [ "$HTTP" = "200" ] && grep -Fqi 'text/csv' <<< "$CT"; then
   PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}GET /api/assets/export.csv → 200 text/csv${C_0}\n" "Tải file kiểm kê tài sản CSV"
 else
   FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s ${C_D}HTTP %s | %s${C_0}\n" "Tải file kiểm kê tài sản CSV" "$HTTP" "$CT"
 fi
 
 TOTAL=$((TOTAL + 1))
-if printf '%s' "$CD" | grep -qi 'attachment; filename="IT-Asset-Audit_'; then
+if grep -Fqi 'attachment; filename="IT-Asset-Audit_' <<< "$CD"; then
   PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}%s${C_0}\n" "CSV là file đính kèm, tên chuẩn kiểm kê" "$(printf '%s' "$CD" | cut -c1-60)"
 else
   FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s ${C_D}%s${C_0}\n" "CSV phải là attachment" "$CD"
@@ -246,7 +254,7 @@ check "POST ticket priority sai → 422" 422 POST "/api/tickets" '{"title":"x","
 section "Đóng / mở lại ticket (PATCH status)"
 TOTAL=$((TOTAL + 1))
 request PATCH "/api/tickets/1006/status" '{"status":"Resolved"}'
-if [ "$STATUS" = "200" ] && printf '%s' "$RESPONSE" | grep -q '"status":"Resolved"'; then
+if [ "$STATUS" = "200" ] && grep -Fq '"status":"Resolved"' <<< "$RESPONSE"; then
   PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}PATCH /api/tickets/1006/status${C_0}\n" "Chuyển #1006 → Resolved (kịch bản yêu cầu)"
 else
   FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s ${C_D}→ %s${C_0}\n" "Chuyển #1006 → Resolved" "$STATUS"
@@ -294,7 +302,7 @@ section "AI Assistant — phân tích ticket bằng LLM local"
 check "GET /api/ai/status → 200" 200 GET "/api/ai/status"
 TOTAL=$((TOTAL + 1))
 request GET "/api/ai/status"
-if printf '%s' "$RESPONSE" | grep -qF '"engine"'; then
+if grep -Fq '"engine"' <<< "$RESPONSE"; then
   PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}→ chứa \"engine\"${C_0}\n" "status trả về engine (ollama | rule-based)"
 else
   FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s${C_0}\n" "status thiếu trường engine"
@@ -303,7 +311,7 @@ check "POST analyze {ticketId:1001} → 200" 200 POST "/api/ai/analyze" '{"ticke
 check "POST analyze {title} tự do → 200" 200 POST "/api/ai/analyze" '{"title":"Máy in offline không in được","category":"Hardware"}'
 TOTAL=$((TOTAL + 1))
 request POST "/api/ai/analyze" '{"title":"Không đăng nhập được do tài khoản bị khóa"}'
-if printf '%s' "$RESPONSE" | grep -qF '"diagnosis"' && printf '%s' "$RESPONSE" | grep -qF '"prevention"'; then
+if grep -Fq '"diagnosis"' <<< "$RESPONSE" && grep -Fq '"prevention"' <<< "$RESPONSE"; then
   PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s ${C_D}→ summary/diagnosis/rca/prevention${C_0}\n" "analyze trả đủ 4 phần ITIL"
 else
   FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s${C_0}\n" "analyze thiếu diagnosis/prevention"
@@ -317,13 +325,15 @@ check "GET / → trang dashboard" 200 GET "/"
 check "GET /app.js → frontend controller" 200 GET "/app.js"
 check "GET /styles.css → stylesheet" 200 GET "/styles.css"
 TOTAL=$((TOTAL + 1))
-if curl -s "$BASE_URL/" | grep -q 'btn-export-assets'; then
+request GET "/"
+if grep -Fq 'btn-export-assets' <<< "$RESPONSE"; then
   PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s${C_0}\n" "UI có nút 'Xuất Danh Sách Tài Sản (CSV)'"
 else
   FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s${C_0}\n" "UI thiếu nút xuất CSV"
 fi
 TOTAL=$((TOTAL + 1))
-if curl -s "$BASE_URL/" | grep -q 'asset-modal'; then
+request GET "/"
+if grep -Fq 'asset-modal' <<< "$RESPONSE"; then
   PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s${C_0}\n" "UI có form modal đăng ký thiết bị"
 else
   FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s${C_0}\n" "UI thiếu form modal thiết bị"
@@ -362,14 +372,22 @@ fi
 if [ "$MANAGEMENT" = "1" ]; then
   # Kill + boot lại server trên CÙNG dataDir → dữ liệu phải còn
   TOTAL=$((TOTAL + 1))
-  kill "$SERVER_PID" 2>/dev/null
-  for _ in $(seq 1 20); do curl -sf "$BASE_URL/api/health" >/dev/null 2>&1 || break; sleep 0.2; done
-  ( cd "$SCRIPT_DIR" && PORT="$PORT" HOST=127.0.0.1 DATA_DIR="$DATA_DIR" node server.js > "$OUT_DIR/server2.log" 2>&1 & echo $! > "$OUT_DIR/server2.pid" )
-  SERVER_PID="$(cat "$OUT_DIR/server2.pid")"
+  kill "$SERVER_PID" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    kill -0 "$SERVER_PID" 2>/dev/null || break
+    sleep 0.1
+  done
+  kill -9 "$SERVER_PID" 2>/dev/null || true
+  (
+    cd "$SCRIPT_DIR" || exit 1
+    exec env PORT="$PORT" HOST=127.0.0.1 DATA_DIR="$DATA_DIR" node server.js
+  ) > "$OUT_DIR/server2.log" 2>&1 &
+  SERVER_PID=$!
   READY=0
   for _ in $(seq 1 40); do curl -sf "$BASE_URL/api/health" >/dev/null 2>&1 && { READY=1; break; }; sleep 0.25; done
-  if [ "$READY" = "1" ] && [ -n "$NEW_TICKET" ] && curl -s "$BASE_URL/api/tickets" | grep -q "\"id\":$NEW_TICKET"; then
-    PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s${C_0}\n" "Restart server → Ticket #%s vẫn còn trong hệ thống" "$NEW_TICKET"
+  request GET "/api/tickets"
+  if [ "$READY" = "1" ] && [ -n "$NEW_TICKET" ] && grep -Fq "\"id\":$NEW_TICKET" <<< "$RESPONSE"; then
+    PASS=$((PASS + 1)); printf "  ${C_G}✔ PASS${C_0} %-52s${C_D} (Ticket #%s)${C_0}\n" "Restart server → Ticket vẫn còn trong hệ thống" "$NEW_TICKET"
   else
     FAIL=$((FAIL + 1)); printf "  ${C_R}✖ FAIL${C_0} %-52s${C_0}\n" "Restart server → mất dữ liệu (persistence lỗi)"
   fi
@@ -396,7 +414,7 @@ printf "  File CSV mẫu      : ${C_D}%s${C_0}\n" "$CSV_FILE"
 printf "${C_Y}════════════════════════════════════════════════════════════════════════${C_0}\n"
 
 if [ "$FAIL" -eq 0 ]; then
-  printf "\n${C_G}✅ TẤT CẢ %s/%s KIỂM TRA PASS — 100%% REST endpoints hoạt động đúng.${C_0}\n\n" "$PASS" "$TOTAL"
+  printf "\n${C_G}✅ TẤT CẢ %s/%s KIỂM TRA BASELINE REST PASS — các factory route được kiểm tra riêng trong node:test.${C_0}\n\n" "$PASS" "$TOTAL"
   exit 0
 fi
 printf "\n${C_R}❌ CÓ %s KIỂM TRA THẤT BẠI — xem chi tiết phía trên.${C_0}\n\n" "$FAIL"

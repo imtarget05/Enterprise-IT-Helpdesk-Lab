@@ -815,6 +815,18 @@ body {
 .meter-label { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text-muted); }
 
 .pulse-dot { display: inline-block; font-size: 9px; color: var(--red); }
+
+.operations-list-item { align-items: flex-start; }
+.operations-list-item .badge { flex-shrink: 0; }
+.list-divider { margin: 10px 0 2px; padding-top: 10px; border-top: 1px dashed var(--border-color); color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.runbook-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.runbook-card { display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-input); color: var(--text-main); text-decoration: none; transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s; }
+.runbook-card:hover { border-color: var(--primary); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.runbook-card strong { color: var(--primary); font-size: 14px; }
+.runbook-card span { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.metrics-grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .metrics-grid-three { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .runbook-grid { grid-template-columns: 1fr; } }
 /* ------------------------ AI modal (LLM local — Ollama) ------------------- */
 .ai-modal-content { max-width: 680px; max-height: 86vh; overflow-y: auto; }
 .ai-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }

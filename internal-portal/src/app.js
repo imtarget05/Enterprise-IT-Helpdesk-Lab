@@ -20,6 +20,8 @@ const { createStore } = require('./store');
 const { createNotifier } = require('./notify');
 const { toCsv, auditFilename, ASSET_COLUMNS } = require('./csv');
 const { createAi } = require('./ai');
+const { createAuth, PERMISSIONS } = require('./auth');
+const { registerEnterpriseRoutes } = require('./enterprise-routes');
 
 // --- CORS allowlist -------------------------------------------------------------------
 /** Parse chuỗi origins: ',' phân cách → mảng; nếu '*' (hoặc rỗng) → cho phép mọi origin. */
@@ -48,6 +50,7 @@ const TICKET_COLUMNS = [
 ];
 
 const str = (v) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v));
+const upper = (v) => str(v).toUpperCase();
 
 function httpError(status, message, details) {
   const err = new Error(message);
@@ -84,12 +87,16 @@ const notFound = (kind, id) => httpError(404, `${kind} với id "${id}" không t
 async function createApp(options = {}) {
   const dataDir = path.resolve(options.dataDir || process.env.DATA_DIR || path.join(process.cwd(), 'data'));
   const staticDir = options.staticDir || path.join(__dirname, '..', 'public');
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const docsDir = path.join(repoRoot, 'docs');
+  const scenariosDir = path.join(repoRoot, 'scenarios');
   const allowedOrigins = options.allowedOrigins ?? process.env.ALLOWED_ORIGINS;
 
   const store = createStore({ dataDir, seed: options.seed });
   await store.load();
 
   const notifier = createNotifier({ dataDir, webhookUrl: options.webhookUrl });
+  const auth = createAuth({ authMode: options.authMode, authUsers: options.authUsers });
 
   // AI assistant — LLM LOCAL qua Ollama (không OpenAI). options.ai cho test
   // inject fetchImpl/ollamaUrl; production đọc OLLAMA_URL/OLLAMA_MODEL.
@@ -108,6 +115,23 @@ async function createApp(options = {}) {
     });
   }
   app.use(express.static(staticDir, { extensions: ['html'] }));
+  // Read-only documentation mounts keep local runbook links usable in Docker and tests.
+  app.use('/docs', express.static(docsDir, { fallthrough: false, index: false }));
+  app.use('/scenarios', express.static(scenariosDir, { fallthrough: false, index: false }));
+  app.use('/api', auth.middleware);
+  app.use('/api', (req, res, next) => {
+    if (auth.mode === 'legacy') return next();
+    if (req.path === '/health' || req.path === '/auth/login' || req.path === '/integrations/minierp/incidents' || req.method === 'OPTIONS') return next();
+    if (!req.user) return res.status(401).json({ error: 'Authentication required.', status: 401, path: req.originalUrl });
+    if (['GET', 'HEAD'].includes(req.method)) return next();
+    let permission = null;
+    if (/^\/assets(?:\/|$)/.test(req.path) && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) permission = PERMISSIONS.ASSET_WRITE;
+    if (/^\/tickets(?:\/|$)/.test(req.path) && ['POST', 'PATCH', 'PUT'].includes(req.method)) permission = PERMISSIONS.TICKET_WRITE;
+    if (req.path === '/ai/analyze') permission = PERMISSIONS.TICKET_WRITE;
+    if (permission && !auth.hasPermission(req.user, permission)) return res.status(403).json({ error: 'Insufficient portal role.', requiredPermission: permission, status: 403, path: req.originalUrl });
+    return next();
+  });
+  registerEnterpriseRoutes({ app, store, auth, notifier, options });
 
   // ------------------------------ Health -------------------
   app.get('/api/health', (req, res) => {
@@ -146,6 +170,15 @@ async function createApp(options = {}) {
       closedTickets: closed,
       criticalAlerts: tickets.filter((t) => (t.priority === 'High' || t.priority === 'Critical') && OPEN_STATUSES.has(t.status)).length,
       slaPercent: handled ? Math.round((done / handled) * 1000) / 10 : 100,
+      slaBreached: tickets.filter((t) => t.slaBreached).length,
+      monitoring: {
+        up: store.data.monitoringChecks.filter((c) => c.status === 'UP').length,
+        down: store.data.monitoringChecks.filter((c) => c.status === 'DOWN').length,
+        degraded: store.data.monitoringChecks.filter((c) => c.status === 'DEGRADED').length,
+      },
+      openProblems: store.data.problems.filter((p) => !['CLOSED', 'RESOLVED'].includes(upper(p.status))).length,
+      openChanges: store.data.changes.filter((c) => c.implementationState !== 'CLOSED').length,
+      pendingAccessRequests: store.data.accessRequests.filter((r) => r.executionState !== 'COMPLETED').length,
       assetsByType: assets.reduce((acc, a) => {
         acc[a.type] = (acc[a.type] || 0) + 1;
         return acc;
@@ -489,6 +522,31 @@ async function createApp(options = {}) {
     [/^\/tickets\/[^/]+$/, ['GET']],
     [/^\/licenses$/, ['GET']],
     [/^\/licenses\/[^/]+$/, ['GET']],
+    [/^\/auth\/login$/, ['POST']],
+    [/^\/auth\/logout$/, ['POST']],
+    [/^\/auth\/me$/, ['GET']],
+    [/^\/tickets\/[^/]+\/timeline$/, ['GET']],
+    [/^\/tickets\/[^/]+\/assign$/, ['POST']],
+    [/^\/tickets\/[^/]+\/work-notes$/, ['POST']],
+    [/^\/tickets\/[^/]+\/transition$/, ['POST']],
+    [/^\/assets\/[^/]+\/(assign|recover)$/, ['POST']],
+    [/^\/problems$/, ['GET', 'POST']],
+    [/^\/problems\/[^/]+$/, ['GET', 'PATCH']],
+    [/^\/problems\/[^/]+\/link-ticket$/, ['POST']],
+    [/^\/changes$/, ['GET', 'POST']],
+    [/^\/changes\/[^/]+$/, ['GET', 'PATCH']],
+    [/^\/changes\/[^/]+\/(approve|implement|close)$/, ['POST']],
+    [/^\/access-requests$/, ['GET', 'POST']],
+    [/^\/access-requests\/[^/]+$/, ['GET']],
+    [/^\/access-requests\/[^/]+\/handoff$/, ['GET']],
+    [/^\/access-requests\/[^/]+\/(approve|complete|offboard)$/, ['POST']],
+    [/^\/monitoring\/checks$/, ['GET', 'POST']],
+    [/^\/monitoring\/status$/, ['GET']],
+    [/^\/monitoring\/history$/, ['GET']],
+    [/^\/monitoring\/checks\/[^/]+$/, ['GET', 'PATCH']],
+    [/^\/monitoring\/checks\/[^/]+\/run$/, ['POST']],
+    [/^\/integrations\/minierp\/incidents$/, ['POST']],
+    [/^\/audit$/, ['GET']],
     [/^\/ai\/status$/, ['GET']],
     [/^\/ai\/analyze$/, ['POST']],
     [/^\/notifications$/, ['GET']],

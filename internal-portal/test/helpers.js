@@ -32,8 +32,8 @@ async function createTestClient(options = {}) {
     server = undefined;
   }
 
-  function api(method, urlPath, body) {
-    const init = { method, headers: {} };
+  function api(method, urlPath, body, extraHeaders = {}) {
+    const init = { method, headers: { ...extraHeaders } };
     if (body !== undefined) {
       init.headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(body);
@@ -41,18 +41,18 @@ async function createTestClient(options = {}) {
     return fetch(baseUrl + urlPath, init);
   }
 
-  async function json(method, urlPath, body) {
-    const res = await api(method, urlPath, body);
+  async function json(method, urlPath, body, extraHeaders = {}) {
+    const res = await api(method, urlPath, body, extraHeaders);
     const type = res.headers.get('content-type') || '';
     const data = type.includes('application/json') ? await res.json() : await res.text();
     return { status: res.status, data, headers: res.headers };
   }
 
   /** Gửi raw body (dùng cho test payload JSON hỏng / sai content-type). */
-  async function send(method, urlPath, rawBody, contentType = 'application/json') {
+  async function send(method, urlPath, rawBody, contentType = 'application/json', extraHeaders = {}) {
     const res = await fetch(baseUrl + urlPath, {
       method,
-      headers: { 'Content-Type': contentType },
+      headers: { 'Content-Type': contentType, ...extraHeaders },
       body: rawBody,
     });
     const type = res.headers.get('content-type') || '';

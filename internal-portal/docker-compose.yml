@@ -7,8 +7,8 @@
 services:
   it-portal:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: internal-portal/Dockerfile
     image: bmc/it-asset-helpdesk-portal:2.0.0
     container_name: it-portal
     restart: unless-stopped
@@ -30,6 +30,9 @@ services:
       # Từ trong container, host.docker.internal trỏ về máy host (xem extra_hosts).
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      AUTH_MODE: ${AUTH_MODE:-legacy}
+      LAB_AUTH_USERS: ${LAB_AUTH_USERS:-}
+      MINIERP_INTEGRATION_KEY: ${MINIERP_INTEGRATION_KEY:-}
     extra_hosts:
       # Cho phép container gọi Ollama trên host ở cả Linux (host-gateway).
       - 'host.docker.internal:host-gateway'

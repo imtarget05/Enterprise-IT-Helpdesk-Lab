@@ -47,6 +47,16 @@ tags:
     description: Lịch sử cảnh báo tự động (webhook/mock)
   - name: AI
     description: Trợ lý AI phân tích ticket bằng LLM chạy LOCAL qua Ollama (không dùng OpenAI) — tự fallback playbook rule-based offline
+  - name: Auth
+    description: Đăng nhập lab, phiên Bearer và phân quyền RBAC
+  - name: ITSM
+    description: Problem, Change và Access lifecycle theo ITIL
+  - name: Monitoring
+    description: Health check, lịch sử probe và incident tự động
+  - name: Integrations
+    description: MiniERP incident receiver idempotent
+  - name: Audit
+    description: Audit trail bền vững cho mutation và truy cập nhạy cảm
 
 paths:
   /api/health:
@@ -587,6 +597,569 @@ paths:
 
 
 
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập lab và nhận Bearer token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: admin }
+                password: { type: string, format: password, example: admin-pass }
+      responses:
+        '200':
+          description: Đăng nhập thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, username, role, expiresInSeconds]
+                properties:
+                  token: { type: string }
+                  username: { type: string }
+                  role: { type: string, example: IT_ADMIN }
+                  expiresInSeconds: { type: integer, example: 28800 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Thu hồi Bearer session hiện tại
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Session đã thu hồi
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Đọc user và quyền hiện tại
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: User và permission list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { type: object }
+                  permissions: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/tickets/{id}/timeline:
+    get:
+      tags: [Tickets]
+      summary: Timeline sự kiện của ticket
+      security: [{ BearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200':
+          description: Danh sách event theo thứ tự thời gian
+          content:
+            application/json:
+              schema: { type: array, items: { type: object } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/tickets/{id}/assign:
+    post:
+      tags: [Tickets]
+      summary: Gán ticket cho L1/L2 hoặc nhóm
+      security: [{ BearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                assignee: { type: string, example: l2 }
+                assignedGroup: { type: string, example: Network Operations }
+      responses:
+        '200': { description: Ticket sau khi gán }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/tickets/{id}/work-notes:
+    post:
+      tags: [Tickets]
+      summary: Thêm work note đã sanitize vào timeline
+      security: [{ BearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, maxLength: 4000, example: Đã kiểm tra DHCP scope. }
+      responses:
+        '201': { description: Work note đã tạo }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/tickets/{id}/transition:
+    post:
+      tags: [Tickets]
+      summary: Chuyển state chuẩn NEW/ASSIGNED/IN_PROGRESS/PENDING/RESOLVED/CLOSED
+      security: [{ BearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, example: IN_PROGRESS }
+                resolutionCode: { type: string, example: FIXED }
+                resolutionSummary: { type: string, example: Đã khắc phục. }
+      responses:
+        '200': { description: Ticket và SLA state mới }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+  /api/assets/{id}/assign:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [Assets]
+      summary: Cấp phát tài sản cho nhân viên
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assignedTo]
+              properties:
+                assignedTo: { type: string, example: 'Nguyen Thi Mai' }
+                dept: { type: string, example: Accounting }
+                businessArea: { type: string, example: Finance }
+      responses:
+        '200': { description: Tài sản ở state ASSIGNED }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/assets/{id}/recover:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [Assets]
+      summary: Thu hồi tài sản về kho
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Tài sản ở state IN_STOCK }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/problems:
+    get:
+      tags: [ITSM]
+      summary: Danh sách problem record
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Problem records
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Problem' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [ITSM]
+      summary: Tạo problem record
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title: { type: string, example: ERP intermittent }
+                service: { type: string, example: MiniERP }
+                rootCause: { type: string }
+                workaround: { type: string }
+                knownError: { type: boolean }
+      responses:
+        '201': { description: Problem đã tạo }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/problems/{id}:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    get:
+      tags: [ITSM]
+      summary: Chi tiết problem
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Problem record }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [ITSM]
+      summary: Cập nhật problem
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                service: { type: string }
+                status: { type: string, example: RESOLVED }
+                rootCause: { type: string }
+                workaround: { type: string }
+                knownError: { type: boolean }
+      responses:
+        '200': { description: Problem sau cập nhật }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/problems/{id}/link-ticket:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [ITSM]
+      summary: Liên kết ticket vào problem (idempotent)
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticketId]
+              properties: { ticketId: { type: integer, example: 1001 } }
+      responses:
+        '200': { description: Problem sau khi link }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/changes:
+    get:
+      tags: [ITSM]
+      summary: Danh sách change record
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Change records
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Change' } }
+    post:
+      tags: [ITSM]
+      summary: Tạo change record; high risk bắt buộc rollback plan
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, reason, risk]
+              properties:
+                title: { type: string, example: Firewall rule update }
+                reason: { type: string, example: Business requirement }
+                risk: { type: string, enum: [LOW, MEDIUM, HIGH] }
+                rollbackPlan: { type: string, example: Revert snapshot }
+      responses:
+        '201': { description: Change đã tạo }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/changes/{id}:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    get:
+      tags: [ITSM]
+      summary: Chi tiết change
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Change record }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [ITSM]
+      summary: Cập nhật change
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Change sau cập nhật }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/changes/{id}/approve:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [ITSM]
+      summary: Duyệt change
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Change đã duyệt }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/changes/{id}/implement:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [ITSM]
+      summary: Bắt đầu triển khai change
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Change đang triển khai }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/changes/{id}/close:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [ITSM]
+      summary: Đóng change sau verification
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Change đã đóng }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/access-requests:
+    get:
+      tags: [ITSM]
+      summary: Danh sách access request
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Access requests
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/AccessRequest' } }
+    post:
+      tags: [ITSM]
+      summary: Tạo onboarding hoặc offboarding request
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestType, employeeId, name]
+              properties:
+                requestType: { type: string, enum: [ONBOARDING, OFFBOARDING] }
+                employeeId: { type: string, example: EMP-0101 }
+                name: { type: string, example: 'Nguyen Thi Mai' }
+                department: { type: string, example: Accounting }
+                requestedGroups: { type: array, items: { type: string } }
+                requestedErpRole: { type: string }
+      responses:
+        '201': { description: Access request đã tạo }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/access-requests/{id}:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    get:
+      tags: [ITSM]
+      summary: Chi tiết access request
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Access request }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/access-requests/{id}/approve:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [ITSM]
+      summary: HR/IT approval
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Request đã sẵn sàng }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/access-requests/{id}/handoff:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    get:
+      tags: [ITSM]
+      summary: JSON handoff an toàn cho PowerShell operator
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Handoff payload không chứa command tùy ý }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/access-requests/{id}/complete:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [ITSM]
+      summary: Đánh dấu onboarding đã hoàn tất
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Request completed, idempotent
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/access-requests/{id}/offboard:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [ITSM]
+      summary: Đánh dấu offboarding đã hoàn tất
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200':
+          description: Offboarding completed, idempotent
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/monitoring/checks:
+    get:
+      tags: [Monitoring]
+      summary: Danh sách monitoring check
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Monitoring checks }
+    post:
+      tags: [Monitoring]
+      summary: Tạo HTTP/TCP/DNS check
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type, target]
+              properties:
+                name: { type: string, example: ERP health }
+                type: { type: string, enum: [HTTP, TCP, DNS] }
+                target: { type: string, example: 'http://127.0.0.1:3000/api/health' }
+                port: { type: integer, example: 443 }
+                failureThreshold: { type: integer, minimum: 1, default: 3 }
+      responses:
+        '201': { description: Check đã tạo }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/monitoring/checks/{id}:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    get:
+      tags: [Monitoring]
+      summary: Chi tiết monitoring check
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Monitoring check }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Monitoring]
+      summary: Cập nhật check
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Check sau cập nhật }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/monitoring/checks/{id}/run:
+    parameters: [{ $ref: '#/components/parameters/PathId' }]
+    post:
+      tags: [Monitoring]
+      summary: Chạy probe; tạo incident khi đạt threshold và dedupe khi đang mở
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { status: { type: string, enum: [UP, DOWN, DEGRADED] } }
+      responses:
+        '200':
+          description: Check, history và incident correlation
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/monitoring/status:
+    get:
+      tags: [Monitoring]
+      summary: Tổng hợp trạng thái check
+      security: [{ BearerAuth: [] }]
+      responses:
+        '200': { description: Số check theo trạng thái }
+
+  /api/monitoring/history:
+    get:
+      tags: [Monitoring]
+      summary: Lịch sử probe theo check
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: checkId, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        '200': { description: Lịch sử có correlation ID }
+
+  /api/integrations/minierp/incidents:
+    post:
+      tags: [Integrations]
+      summary: Nhận incident MiniERP idempotent theo externalRef
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [externalRef, title]
+              properties:
+                externalRef: { type: string, example: ERP-2026-0001 }
+                source: { type: string, enum: [MINIERP], default: MINIERP }
+                title: { type: string, example: ERP transaction failed }
+                severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+                service: { type: string, example: MiniERP }
+                description: { type: string }
+                referenceType: { type: string }
+                referenceNo: { type: string }
+      responses:
+        '200':
+          description: Payload trùng, trả lại ticket cũ kèm idempotent=true
+        '201':
+          description: Ticket mới
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { description: Sai integration key }
+        '409': { description: externalRef đã dùng với payload khác }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /api/audit:
+    get:
+      tags: [Audit]
+      summary: Đọc audit trail gần đây
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        '200': { description: Audit event đã lưu bền vững }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
   parameters:
     PathId:
@@ -631,6 +1204,26 @@ components:
         $ref: '#/components/schemas/Priority'
 
   responses:
+    Unauthorized:
+      description: Thiếu hoặc không hợp lệ Bearer session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Authentication required.
+            status: 401
+            path: /api/tickets
+    Forbidden:
+      description: Người dùng đã đăng nhập nhưng không có permission
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Insufficient portal role.
+            status: 403
+            path: /api/changes
     BadRequest:
       description: Thiếu trường bắt buộc hoặc payload không hợp lệ
       content:
@@ -693,6 +1286,69 @@ components:
 
 
   schemas:
+    Problem:
+      type: object
+      description: Problem record theo ITIL
+      required: [id, title, status, linkedTicketIds, createdAt]
+      properties:
+        id: { type: integer, example: 1 }
+        title: { type: string, example: ERP intermittent }
+        service: { type: string, example: MiniERP }
+        status: { type: string, example: OPEN }
+        rootCause: { type: string }
+        workaround: { type: string }
+        knownError: { type: boolean }
+        linkedTicketIds: { type: array, items: { type: integer } }
+        owner: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Change:
+      type: object
+      description: Change record có kiểm soát và rollback
+      required: [id, title, reason, risk, implementationState]
+      properties:
+        id: { type: integer, example: 1 }
+        title: { type: string, example: Firewall rule update }
+        reason: { type: string }
+        risk: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        rollbackPlan: { type: string }
+        implementationState: { type: string, example: DRAFT }
+        approval: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AccessRequest:
+      type: object
+      description: Onboarding/offboarding access request
+      required: [id, requestType, employeeId, name, executionState, evidence]
+      properties:
+        id: { type: integer, example: 1 }
+        requestType: { type: string, enum: [ONBOARDING, OFFBOARDING] }
+        employeeId: { type: string, example: EMP-0101 }
+        name: { type: string, example: Nguyen Thi Mai }
+        upn: { type: string }
+        department: { type: string }
+        requestedGroups: { type: array, items: { type: string } }
+        requestedErpRole: { type: string }
+        executionState: { type: string, example: READY }
+        evidence: { type: array, items: { type: object } }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+
+    AuditEvent:
+      type: object
+      required: [id, at, actor, action, entityType]
+      properties:
+        id: { type: integer }
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        role: { type: string }
+        action: { type: string, example: TICKET_TRANSITION }
+        entityType: { type: string }
+        entityId: { type: integer, nullable: true }
+        details: { type: object, additionalProperties: true }
+
     AssetStatus:
       type: string
       description: Trạng thái vòng đời của tài sản
@@ -1210,7 +1866,7 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: |
-        Đăng nhập và lấy token từ POST /api/login, gửi kèm header
+        Đăng nhập và lấy token từ POST /api/auth/login, gửi kèm header
         Authorization: Bearer <token>. Token hết hạn sau 8 giờ.
 
 

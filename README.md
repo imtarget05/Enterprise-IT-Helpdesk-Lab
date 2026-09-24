@@ -7,10 +7,10 @@
   <a href="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml">
     <img src="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml/badge.svg" alt="CI"/>
   </a>
-  <img src="https://img.shields.io/badge/Tests-106%2F106%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
-  <img src="https://img.shields.io/badge/API%20Checks-68%2F68%20Passing-brightgreen?logo=curl&logoColor=white" alt="API Checks"/>
+  <img src="https://img.shields.io/badge/Tests-160%2F160%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
+  <img src="https://img.shields.io/badge/API%20Smoke-68%2F68%20Passing-brightgreen?logo=curl&logoColor=white" alt="API Checks"/>
   <img src="https://img.shields.io/badge/Node.js-18%20%7C%2020%20%7C%2022-339933?logo=nodedotjs&logoColor=white" alt="Node.js"/>
-  <img src="https://img.shields.io/badge/PowerShell-AST%20Verified-5391FE?logo=powershell&logoColor=white" alt="PowerShell"/>
+  <img src="https://img.shields.io/badge/PowerShell-AST%20or%20Static%20Fallback-5391FE?logo=powershell&logoColor=white" alt="PowerShell syntax verification"/>
   <img src="https://img.shields.io/badge/Docker-Hardened-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/Windows_Server-2022-0078D4?logo=windows&logoColor=white" alt="Windows Server 2022"/>
   <img src="https://img.shields.io/badge/Active_Directory-Configured-0078D4?logo=microsoft&logoColor=white" alt="Active Directory"/>
@@ -59,6 +59,7 @@ Web app chạy trong Docker, dành cho nhân viên IT dùng hàng ngày:
 | 🚨 **Cảnh báo tự động** | Ticket ưu tiên Cao/Khẩn → nhận thông báo tức thì, ghi audit log |
 | 📊 **Dashboard** | Tổng quan: số thiết bị, số ticket đang mở, tỉ lệ giải quyết đúng hạn |
 | 🤖 **Trợ lý AI (tùy chọn)** | Tích hợp LLM local (Ollama — không dùng ChatGPT/cloud) để gợi ý hướng chẩn đoán |
+| 🏭 **Factory Operations** | Monitoring, Problem/Change, Access lifecycle, audit và 12 scenario vận hành tái lập được |
 
 ### 📋 3. 20 kịch bản sự cố thực chiến
 
@@ -82,6 +83,10 @@ Mỗi ticket trong `tickets/` viết theo khung chuẩn ITIL:
 | `New-CompanyUser.ps1` | Đọc file CSV → tạo hàng loạt user AD, đặt vào đúng OU, gán group phòng ban |
 | `Export-ITAssetAudit.ps1` | Quét thông tin phần cứng (CPU, RAM, ổ đĩa) → xuất file kiểm kê |
 | `Test-NetworkHealth.ps1` | Chẩn đoán mạng 6 lớp: loopback → gateway → domain → DNS → internet |
+| `Backup-HelpdeskData.ps1` / `Restore-HelpdeskData.ps1` | Backup JSON Portal có SHA-256, retention và restore an toàn vào test path |
+| `Backup-ADConfiguration.ps1` | Export GPO, DHCP và DNS evidence trước thay đổi |
+| `Disable-CompanyUser.ps1` | Offboarding idempotent: disable account, gỡ group nhạy cảm, ghi evidence |
+| `Test-PrintScanHealth.ps1` | Kiểm tra print server, label printer, scanner USB wedge và MiniERP |
 
 ---
 
@@ -123,6 +128,7 @@ Tôi đã thực hành đúng các kịch bản đó và ghi lại thành tài l
 cd internal-portal
 docker compose up -d --wait
 # → Mở http://localhost:3000
+# Image dùng root context để bundle runbooks/scenarios vào portal.
 ```
 
 ```bash
@@ -136,8 +142,8 @@ npm install && npm start
 **Chạy test:**
 ```bash
 cd internal-portal
-npm test          # 106 test cases — tất cả pass ✅
-./test-api.sh     # 68 curl API checks — tất cả pass ✅
+npm test          # 160 test cases — tất cả pass ✅
+./test-api.sh     # 68 curl API smoke checks — tất cả pass ✅
 ```
 
 ---
@@ -170,12 +176,14 @@ Vào tab Tickets → nhấn nút "AI" trên bất kỳ ticket nào
 ```
 05-Enterprise-IT-Helpdesk-Lab/
 ├── 📁 tickets/              ← 20 kịch bản sự cố ITIL thực chiến
-├── 📁 docs/                 ← Tài liệu lab: topology, AD setup, GPO, onboarding SOP
-├── 📁 scripts/              ← PowerShell automation + CI helper scripts
+├── 📁 docs/                 ← topology, AD/DNS/DHCP, GPO, onboarding + 5 factory runbook
+├── 📁 scenarios/factory/    ← 12 scenario tái lập được cho Factory IT
+├── 📁 scripts/              ← PowerShell automation + CI/evidence helper
+├── 📁 artifacts/            ← baseline và final verification evidence
 └── 📁 internal-portal/      ← Web app Node.js
-    ├── 📁 src/              ← API server (Express)
-    ├── 📁 public/           ← Giao diện web (HTML/JS)
-    └── 📁 test/             ← 106 test cases
+    ├── 📁 src/              ← API server (Express) + auth/ITSM/monitoring
+    ├── 📁 public/           ← Giao diện web (HTML/JS/CSS)
+    └── 📁 test/             ← 160 test cases + 12 factory scenario contract
 ```
 
 ---
@@ -201,6 +209,12 @@ Vào tab Tickets → nhấn nút "AI" trên bất kỳ ticket nào
 - [🖥️ Cài đặt AD / DNS / DHCP](docs/02-ad-dns-dhcp-setup.md)
 - [🔒 Ma trận GPO bảo mật](docs/03-gpo-security-matrix.md)
 - [🎫 20 ticket sự cố](tickets/)
+- [🏭 Factory operations & 12 scenario](scenarios/factory/)
+- [🧭 VLAN / Firewall runbook](docs/07-vlan-firewall-design.md)
+- [🧭 AD / Identity / Security runbook](docs/08-ad-identity-security.md)
+- [🧭 Monitoring / Incident runbook](docs/09-monitoring-incident-runbook.md)
+- [🧭 Backup / Restore / DR runbook](docs/10-backup-restore-dr.md)
+- [🧭 MiniERP integration contract](docs/11-minierp-integration.md)
 - [❓ Câu hỏi phỏng vấn Helpdesk](docs/06-interview-qa.md)
 
 ---

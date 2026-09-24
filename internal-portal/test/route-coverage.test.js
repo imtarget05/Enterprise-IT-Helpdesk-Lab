@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Chứng minh "kiểm thử 100% REST endpoints" (Yêu cầu #6) bằng con số, không bằng tuyên bố:
- *   1. Lấy danh sách route đăng ký thật trong src/app.js (list-routes.js).
+ * Chứng minh route inventory được test suite nhắm tới bằng số liệu, không bằng tuyên bố:
+ *   1. Lấy danh sách route đăng ký thật trong src/app.js + src/enterprise-routes.js (list-routes.js).
  *   2. Quét toàn bộ test suite (test/*.test.js + test-api.sh) xem route nào được gọi.
  *   3.Assert: mọi route đều phải xuất hiện, và mỗi method/path phải có cả ca succeed
  *      lẫn ca lỗi (4xx) tương ứng — chống tình trạng "gọi cho có".

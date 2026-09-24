@@ -1,0 +1,13 @@
+# Root build context for the monorepo Dockerfile. Keep secrets, runtime data,
+# local dependencies and generated logs out of the image build context.
+.git
+.kilo
+artifacts
+**/node_modules
+internal-portal/data
+internal-portal/exports
+**/*.log
+**/*.csv
+**/.DS_Store
+internal-portal/.env
+internal-portal/.env.*

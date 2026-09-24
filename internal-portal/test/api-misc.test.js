@@ -38,6 +38,26 @@ test('Method không hỗ trợ → 405 + Allow header', async () => {
   assert.equal(postOnItem.status, 405);
 });
 
+test('Factory routes trả 405 đúng Allow khi sai method', async () => {
+  const checks = await c.json('PUT', '/api/monitoring/checks');
+  assert.equal(checks.status, 405);
+  assert.match(checks.headers.get('allow'), /GET/);
+  assert.match(checks.headers.get('allow'), /POST/);
+
+  const run = await c.json('GET', '/api/monitoring/checks/1/run');
+  assert.equal(run.status, 405);
+  assert.match(run.headers.get('allow'), /POST/);
+
+  const handoff = await c.json('POST', '/api/access-requests/1/handoff');
+  assert.equal(handoff.status, 405);
+  assert.match(handoff.headers.get('allow'), /GET/);
+
+  const change = await c.json('PUT', '/api/changes');
+  assert.equal(change.status, 405);
+  assert.match(change.headers.get('allow'), /GET/);
+  assert.match(change.headers.get('allow'), /POST/);
+});
+
 test('Route lạ trong /api → 404 JSON kèm path', async () => {
   const notFound = await c.json('GET', '/api/does-not-exist');
   assert.equal(notFound.status, 404);
@@ -61,4 +81,15 @@ test('Static: GET / → HTML dashboard, GET /app.js → JS có nút export CSV',
   const script = await c.api('GET', '/app.js');
   assert.equal(script.status, 200);
   assert.match(await script.text(), /btn-export-assets|exportAssetsCsv/);
+});
+
+test('Runbook và scenario docs được serve read-only từ portal', async () => {
+  const runbook = await c.api('GET', '/docs/07-vlan-firewall-design.md');
+  assert.equal(runbook.status, 200);
+  assert.match(runbook.headers.get('content-type'), /text\/markdown|text\/plain/);
+  assert.match(await runbook.text(), /VLAN/);
+
+  const scenario = await c.api('GET', '/scenarios/factory/scenario-01-dhcp-apipa.md');
+  assert.equal(scenario.status, 200);
+  assert.match(await scenario.text(), /## Evidence/);
 });

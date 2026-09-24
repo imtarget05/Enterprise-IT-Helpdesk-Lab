@@ -17,9 +17,17 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const { seedData } = require('./seed');
+const { normalizeAssetRecord, normalizeTicketRecord } = require('./itsm');
 
-const SCHEMA_VERSION = 1;
-const COLLECTIONS = ['assets', 'tickets', 'licenses'];
+function defaultCollections() {
+  return Object.fromEntries(COLLECTIONS.map((key) => [key, []]));
+}
+
+const SCHEMA_VERSION = 2;
+const COLLECTIONS = [
+  'assets', 'tickets', 'licenses', 'ticketEvents', 'problems', 'changes',
+  'accessRequests', 'monitoringChecks', 'monitoringHistory', 'auditEvents', 'notifications',
+];
 
 function nowIso() {
   return new Date().toISOString();
@@ -33,7 +41,8 @@ function createStore(options = {}) {
   const store = {
     dataDir,
     file,
-    data: { assets: [], tickets: [], licenses: [] },
+    schemaVersion: SCHEMA_VERSION,
+    data: defaultCollections(),
     seeded: false,
     lastLoadedAt: null,
     writeChain: Promise.resolve(),
@@ -60,15 +69,28 @@ function createStore(options = {}) {
   store.load = async function load() {
     await fs.mkdir(dataDir, { recursive: true });
     const snapshot = await readSnapshot();
+    const sourceVersion = Number(snapshot && (snapshot.schemaVersion || snapshot.version)) || 0;
 
     if (snapshot && Array.isArray(snapshot.assets)) {
       store.seeded = false;
+      store.data = defaultCollections();
       for (const key of COLLECTIONS) {
         store.data[key] = Array.isArray(snapshot[key]) ? snapshot[key] : [];
       }
+      store.data.assets = store.data.assets.map(normalizeAssetRecord);
+      store.data.tickets = store.data.tickets.map((ticket) => normalizeTicketRecord(ticket));
+      if (sourceVersion < SCHEMA_VERSION) {
+        const migration = `${file}.migration-${Date.now()}.bak`;
+        await fs.copyFile(file, migration);
+        store.migrationBackup = migration;
+        await persist();
+      }
     } else {
       store.seeded = true;
-      store.data = seed();
+      store.data = defaultCollections();
+      Object.assign(store.data, seed());
+      store.data.assets = store.data.assets.map(normalizeAssetRecord);
+      store.data.tickets = store.data.tickets.map((ticket) => normalizeTicketRecord(ticket));
       await persist();
     }
 
@@ -78,7 +100,7 @@ function createStore(options = {}) {
 
   async function persist() {
     const payload = JSON.stringify(
-      { version: SCHEMA_VERSION, updatedAt: nowIso(), ...store.data },
+      { version: 1, schemaVersion: SCHEMA_VERSION, updatedAt: nowIso(), ...store.data },
       null,
       2
     );
@@ -108,6 +130,16 @@ function createStore(options = {}) {
   store.find = function find(collection, id) {
     const numeric = Number(id);
     return (store.data[collection] || []).find((row) => Number(row.id) === numeric);
+  };
+
+  store.append = function append(collection, row) {
+    if (!store.data[collection]) store.data[collection] = [];
+    store.data[collection].push(row);
+    return row;
+  };
+
+  store.findBy = function findBy(collection, predicate) {
+    return (store.data[collection] || []).find(predicate);
   };
 
   store.remove = function remove(collection, id) {
