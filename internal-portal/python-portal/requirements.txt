@@ -1,0 +1,8 @@
+# Portal chạy: chỉ cần Flask (nhẹ, ~1MB)
+Flask>=3.0
+flask-cors>=4.0
+# RAG: KHÔNG bắt buộc cài gì thêm (stdlib + urllib).
+#  - Có Docker  -> docker run -p 6333:6333 qdrant/qdrant (search ANN thật)
+#  - Không Docker -> tự fallback InMemory (demo vẫn chạy)
+#  - Có Ollama   -> embedding nomic-embed-text + sinh Qwen (ngữ nghĩa thật)
+#  - Không Ollama -> hash-TF offline (pipeline vẫn chạy, CI xanh)

@@ -5,6 +5,28 @@
 #  Dừng (giữ dữ liệu):         docker compose down
 # =============================================================================
 services:
+  # --- Vector DB cho RAG (tri thức runbook nội bộ) ---------------------------
+  # Hồ sơ nhẹ: ~30MB RAM khi chưa có dữ liệu. Portal tự fallback InMemory
+  # nếu service này chưa bật nên `docker compose up it-portal` vẫn chạy.
+  qdrant:
+    build:
+      context: ..
+      dockerfile: internal-portal/Dockerfile.qdrant
+    image: bmc/qdrant-rag:1.0
+    container_name: it-qdrant
+    restart: unless-stopped
+    ports:
+      - '${QDRANT_PORT_HOST:-6333}:6333'
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    networks:
+      - it-network
+    logging:
+      driver: json-file
+      options:
+        max-size: ${LOG_MAX_SIZE:-10m}
+        max-file: ${LOG_MAX_FILE:-3}
+
   it-portal:
     build:
       context: ..
@@ -30,6 +52,12 @@ services:
       # Từ trong container, host.docker.internal trỏ về máy host (xem extra_hosts).
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      # OpenAI cloud — đọc từ .env (không commit). Để trống = tắt tầng cloud.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      # RAG — trỏ về service qdrant trong cùng network (để trống = InMemory).
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-it_helpdesk_runbooks}
       AUTH_MODE: ${AUTH_MODE:-legacy}
       LAB_AUTH_USERS: ${LAB_AUTH_USERS:-}
       MINIERP_INTEGRATION_KEY: ${MINIERP_INTEGRATION_KEY:-}
@@ -82,3 +110,7 @@ services:
 networks:
   it-network:
     driver: bridge
+
+volumes:
+  qdrant-storage:
+    driver: local

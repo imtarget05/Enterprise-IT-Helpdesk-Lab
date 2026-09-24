@@ -182,3 +182,51 @@ test('POST /api/ai/analyze — model trả JSON hỏng → fail-soft về rule-b
     await c.cleanup();
   }
 });
+
+/** Fetch giả lập OpenAI chat completions (không tốn quota, không cần key thật). */
+function fakeOpenAiFetch(chatContent) {
+  return async (url, opts) => {
+    if (String(url).includes('api.openai.com')) {
+      const auth = (opts && opts.headers && opts.headers.Authorization) || '';
+      assert.ok(auth.startsWith('Bearer '), 'phải gửi Authorization Bearer');
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: chatContent } }] }) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+}
+
+test('POST /api/ai/analyze — có OPENAI_API_KEY (fake) → engine openai, không lộ key', async () => {
+  const c = await createTestClient({
+    ai: { ollamaUrl: 'http://127.0.0.1:1', timeoutMs: 500, openaiKey: 'sk-test-fake', fetchImpl: fakeOpenAiFetch(VALID_ANALYSIS) },
+  });
+  await c.start();
+  try {
+    const { status, data } = await c.json('POST', '/api/ai/analyze', { title: 'Máy in offline', category: 'Hardware' });
+    assert.equal(status, 200);
+    assert.equal(data.engine, 'openai');
+    assert.equal(data.model, 'gpt-4o-mini');
+    assert.ok(data.summary.includes('APIPA'));
+    assert.ok(Array.isArray((data.rag || {}).sources), 'phải có nguồn RAG');
+    assert.equal(JSON.stringify(data).includes('sk-test-fake'), false, 'key không được xuất hiện trong response');
+  } finally {
+    await c.cleanup();
+  }
+});
+
+test('POST /api/ai/analyze — OpenAI 401 → rớt về rule-based, báo rõ lý do', async () => {
+  const badKey = async (url) => (String(url).includes('api.openai.com')
+    ? { ok: false, status: 401, json: async () => ({ error: { message: 'Incorrect API key' } }) }
+    : { ok: false, status: 404, json: async () => ({}) });
+  const c = await createTestClient({
+    ai: { ollamaUrl: 'http://127.0.0.1:1', timeoutMs: 500, openaiKey: 'sk-bad', fetchImpl: badKey },
+  });
+  await c.start();
+  try {
+    const { status, data } = await c.json('POST', '/api/ai/analyze', { title: 'Máy in offline không in được' });
+    assert.equal(status, 200);
+    assert.equal(data.engine, 'rule-based');
+    assert.ok(data.fallbackReason.includes('401'), 'phải báo rõ key không hợp lệ');
+  } finally {
+    await c.cleanup();
+  }
+});

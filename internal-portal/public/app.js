@@ -595,15 +595,24 @@ async function analyzeTicket(id) {
       body: JSON.stringify({ ticketId: id }),
     });
 
-    $('ai-engine').textContent =
-      data.engine === 'ollama' ? `LLM local · ${data.model}` : `Playbook offline${data.playbook ? ' · ' + data.playbook : ''}`;
-    $('ai-engine').className = `badge ${data.engine === 'ollama' ? 'badge-blue' : 'badge-orange'}`;
+    const engineLabel = data.engine === 'openai'
+      ? `OpenAI · ${data.model}`
+      : data.engine === 'ollama' ? `LLM local · ${data.model}` : `Playbook offline${data.playbook ? ' · ' + data.playbook : ''}`;
+    $('ai-engine').textContent = engineLabel;
+    $('ai-engine').className = `badge ${data.engine === 'rule-based' ? 'badge-orange' : data.engine === 'openai' ? 'badge-green' : 'badge-blue'}`;
     $('ai-summary').textContent = data.summary;
     $('ai-diagnosis').innerHTML = (data.diagnosis || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('');
     $('ai-rca').textContent = data.rca;
     $('ai-prevention').innerHTML = (data.prevention || []).map((s) => `<li>${escapeHtml(s)}</li>`).join('');
+    const sources = (data.rag && data.rag.sources) || [];
+    const srcWrap = $('ai-sources-wrap');
+    if (srcWrap) {
+      srcWrap.hidden = sources.length === 0;
+      $('ai-sources').innerHTML = sources.map((s) => `<li><code>${escapeHtml(s)}</code></li>`).join('');
+    }
     $('ai-meta').textContent =
       `engine: ${data.engine}` +
+      (data.rag && data.rag.hits ? ` · RAG: ${data.rag.hits} đoạn` : '') +
       (data.fallbackReason ? ` · fallback: ${data.fallbackReason}` : '') +
       ` · tạo lúc ${data.generatedAt}`;
     body.hidden = false;

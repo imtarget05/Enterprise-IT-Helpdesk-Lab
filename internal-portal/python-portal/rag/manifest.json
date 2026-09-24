@@ -1,0 +1,7 @@
+{
+  "count": 255,
+  "dim": 384,
+  "backend": "hash-tf",
+  "mode": "memory",
+  "at": "2026-09-25 00:09"
+}

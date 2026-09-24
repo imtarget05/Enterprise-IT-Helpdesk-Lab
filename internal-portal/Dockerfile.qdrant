@@ -1,0 +1,21 @@
+# =============================================================================
+# Qdrant — Vector DB cho RAG pipeline (tri thức runbook IT nội bộ)
+# Build: docker build -f internal-portal/Dockerfile.qdrant -t bmc/qdrant-rag:1.0 .
+# Chạy : docker compose up -d qdrant  (đã khai báo service trong docker-compose.yml)
+#
+# Collection `it_helpdesk_runbooks` do portal tự tạo lúc ingest/runtime
+# (PUT /collections), không cần seed sẵn trong image → image giữ nguyên
+# upstream, chỉ thêm biến môi trường + volume lưu trữ.
+# =============================================================================
+FROM qdrant/qdrant:v1.13.5
+
+# Cấu hình nhẹ cho máy dev / VPS nhỏ (tắt telemetry, giới hạn log)
+ENV QDRANT__TELEMETRY_DISABLED=true \
+    QDRANT__LOG_LEVEL=WARN
+
+EXPOSE 6333 6334
+
+VOLUME ["/qdrant/storage"]
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 --start-period=10s \
+  CMD ["/qdrant/qdrant", "--help"] > /dev/null && wget -q -O - http://127.0.0.1:6333/ > /dev/null || exit 1

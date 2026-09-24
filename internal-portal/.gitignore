@@ -16,6 +16,10 @@ npm-debug.log*
 logs/
 *.log
 
+# Coverage (c8 sinh lcov.info cho SonarCloud, không commit)
+coverage/
+.nyc_output/
+
 # OS / editor
 .DS_Store
 Thumbs.db

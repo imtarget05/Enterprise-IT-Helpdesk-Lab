@@ -313,7 +313,7 @@ paths:
         hệ thống gọi notifier (webhook thật nếu cấu hình `IT_WEBHOOK_URL`, ngược lại ghi
         `data/notifications.log` + console) và trả thêm cờ `alerted: true`.
         Lỗi webhook **không** làm hỏng request tạo ticket.
-            operationId: createTicket
+      operationId: createTicket
       requestBody:
         required: true
         content:
