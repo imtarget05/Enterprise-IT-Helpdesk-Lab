@@ -161,13 +161,31 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: SonarQube Cloud scan
+      # NOTE: từng dùng SonarSource/sonarqube-scan-action@v5 nhưng step
+      # "Run SonarScanner" của nó exit 1 tức thì mà không in log (2 run liên tiếp).
+      # Gọi sonar-scanner CLI trực tiếp để log minh bạch, dễ debug.
+      - name: SonarQube Cloud scan (sonar-scanner CLI trực tiếp)
         if: steps.check-token.outputs.available == 'true'
-        uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          # Nếu Project Key thật khác sonar-project.properties, đặt secret
-          # SONAR_PROJECT_KEY (tùy chọn) để override mà không cần sửa file.
-          args: >
-            ${{ secrets.SONAR_PROJECT_KEY != '' && format('-Dsonar.projectKey={0}', secrets.SONAR_PROJECT_KEY) || '' }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+        run: |
+          set -euo pipefail
+          SCANNER_VERSION="7.2.0.5079"
+          SCANNER_DIR="$RUNNER_TEMP/sonar-scanner-cli"
+          if [ ! -x "$SCANNER_DIR/bin/sonar-scanner" ]; then
+            echo "⬇ Tải SonarScanner CLI $SCANNER_VERSION ..."
+            mkdir -p "$SCANNER_DIR" /tmp/sonar-dl
+            curl -sL -o /tmp/sonar-scanner.zip "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SCANNER_VERSION}-linux-x64.zip"
+            unzip -q -o /tmp/sonar-scanner.zip -d /tmp/sonar-dl
+            mv -f /tmp/sonar-dl/sonar-scanner-${SCANNER_VERSION}-linux-x64/* "$SCANNER_DIR/"
+          fi
+          EXTRA_ARGS=""
+          if [ -n "${SONAR_PROJECT_KEY:-}" ]; then
+            echo "→ Override projectKey từ secret SONAR_PROJECT_KEY."
+            EXTRA_ARGS="-Dsonar.projectKey=${SONAR_PROJECT_KEY}"
+          else
+            echo "→ Dùng projectKey trong sonar-project.properties."
+          fi
+          # shellcheck disable=SC2086
+          "$SCANNER_DIR/bin/sonar-scanner" -Dsonar.token="$SONAR_TOKEN" $EXTRA_ARGS
