@@ -166,3 +166,8 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@v5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          # Nếu Project Key thật khác sonar-project.properties, đặt secret
+          # SONAR_PROJECT_KEY (tùy chọn) để override mà không cần sửa file.
+          args: >
+            ${{ secrets.SONAR_PROJECT_KEY != '' && format('-Dsonar.projectKey={0}', secrets.SONAR_PROJECT_KEY) || '' }}
