@@ -65,6 +65,12 @@ async function createTestClient(options = {}) {
 
   async function cleanup() {
     await stop();
+    // Store ghi đĩa fire-and-forget qua writeChain (journal + tmp + rename atomic).
+    // Phải drain hết trước khi xoá dataDir, nếu không rename sẽ ném ENOENT và
+    // rm sẽ ném ENOTEMPTY vì file tmp vừa sinh -> unhandledRejection trong test.
+    if (context && context.store && typeof context.store.flush === 'function') {
+      await context.store.flush();
+    }
     await fs.rm(dataDir, { recursive: true, force: true });
   }
 
