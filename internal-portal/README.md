@@ -6,7 +6,7 @@
 
 Ứng dụng web nội bộ quản lý **tài sản CNTT**, **ticket hỗ trợ (ITIL)** và **bản quyền phần mềm**, phục vụ môi trường Enterprise IT Operations Platform.
 
-- **Backend:** Node.js 18+/22, Express 4, CORS — persistence file JSON nguyên tử, **0 dependency native**.
+- **Backend:** Node.js 20+/22, Express 4, CORS — persistence file JSON nguyên tử, **0 dependency native**.
 - **Frontend:** SPA một trang (`public/`) — vanilla JS, dark mode, toast, skeleton, sort/filter, xuất CSV.
 - **Kiểm thử:** `269` test Node (`node:test`) + `79` test Flask (`python-portal/`, chạy cô lập với `DATA_FILE` riêng) + route inventory `55` route; `test-api.sh` chạy `68` smoke checks cho baseline REST, còn factory routes có integration tests riêng.
 - **Factory Operations:** 5 runbook (VLAN/firewall, AD/identity, monitoring, backup/DR, MiniERP) + 12 scenario có cấu trúc Mục tiêu/Điều kiện/Thao tác/Kết quả/Evidence.

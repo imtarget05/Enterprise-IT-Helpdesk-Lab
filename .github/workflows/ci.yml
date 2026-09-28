@@ -3,7 +3,8 @@
 #
 #  6 job độc lập, chạy song song trên mỗi push/PR vào main:
 #    1. portal-tests : npm test (node:test) + test-api.sh (curl smoke)
-#                      trên ma trận Node 18 / 20 / 22
+#                      trên ma trận Node 20 / 22 (18 bị bỏ: --test-timeout/
+#                      /--test-force-exit cần Node 20+; project target Node 20+).
 #    2. ps1-syntax   : parse file PowerShell bằng AST parser THẬT (pwsh có sẵn
 #                      trên ubuntu-latest) qua scripts/verify-ps1-syntax.sh
 #    3. compose-config: validate docker-compose.yml + so khớp biến với .env.example
@@ -47,7 +48,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['18', '20', '22']
+        # Node 18 bị bỏ: `node --test --test-timeout/--test-force-exit` chỉ có
+        # từ Node 20, và brace-expansion@5 yêu cầu "20 || >=22" → npm ci chỉ
+        # EBADENGINE trên 18. Project target Node 20+ (xem internal-portal/README.md).
+        node: ['20', '22']
     steps:
       - name: Checkout
         uses: actions/checkout@v5

@@ -135,7 +135,7 @@ Tôi đã thực hành đúng các kịch bản đó và ghi lại thành tài l
 
 ## Chạy thử ngay (dưới 2 phút)
 
-**Yêu cầu:** Node.js 18+ hoặc Docker.
+**Yêu cầu:** Node.js 20+ hoặc Docker.
 
 ```bash
 # Option 1: Docker (khuyến nghị)
