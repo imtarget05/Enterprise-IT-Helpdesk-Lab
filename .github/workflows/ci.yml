@@ -1,14 +1,17 @@
 # =============================================================================
 #  CI — Enterprise IT Helpdesk Lab
 #
-#  5 job độc lập, chạy song song trên mỗi push/PR vào main:
+#  6 job độc lập, chạy song song trên mỗi push/PR vào main:
 #    1. portal-tests : npm test (node:test) + test-api.sh (curl smoke)
 #                      trên ma trận Node 18 / 20 / 22
 #    2. ps1-syntax   : parse file PowerShell bằng AST parser THẬT (pwsh có sẵn
 #                      trên ubuntu-latest) qua scripts/verify-ps1-syntax.sh
 #    3. compose-config: validate docker-compose.yml + so khớp biến với .env.example
 #    4. openapi-spec  : swagger-cli validate tài liệu OpenAPI 3.1 của REST API
-#    5. sonarcloud    : quét SonarQube Cloud (CI-based). Bỏ qua êm nếu chưa có
+#    5. python-portal-tests: unittest (stdlib) cho Flask alternate — isolation
+#                      data, data preservation, RAG cache; KHÔNG network ngoài
+#                      registry, KHÔNG Qdrant/Ollama, DATA_FILE trỏ thư mục tạm
+#    6. sonarcloud    : quét SonarQube Cloud (CI-based). Bỏ qua êm nếu chưa có
 #                      secret SONAR_TOKEN — khi đó Sonar dùng Automatic Analysis
 #                      với cấu hình trong sonar-project.properties.
 #
@@ -47,7 +50,7 @@ jobs:
         node: ['18', '20', '22']
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node ${{ matrix.node }}
         uses: actions/setup-node@v4
@@ -68,7 +71,7 @@ jobs:
 
       - name: Upload coverage artifact (Node 22 only)
         if: matrix.node == '22'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-lcov
           path: internal-portal/coverage/lcov.info
@@ -85,7 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Parse .ps1 bằng PowerShell AST parser
         run: bash scripts/verify-ps1-syntax.sh
@@ -98,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: docker compose config --quiet
         run: docker compose -f internal-portal/docker-compose.yml config --quiet
@@ -114,7 +117,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -125,7 +128,178 @@ jobs:
         run: npx --yes swagger-cli validate internal-portal/public/openapi.yaml
 
   # ---------------------------------------------------------------------------
-  # 5) SonarQube Cloud scan (CI-based) — fix "last analysis has failed" của
+  # 5) Python portal tests (Flask alternate) — isolation + data preservation.
+  #    - stdlib `unittest` (không thêm test runner hay dependency mới).
+  #    - Cài đúng `python-portal/requirements.txt` (Flask + flask-cors).
+  #    - KHÔNG network ngoài package registry: test tự chặn urllib và trỏ
+  #      QDRANT_URL/OLLAMA_URL về 127.0.0.1:1 (không có Qdrant/Ollama trong CI).
+  #    - DATA_FILE trỏ thư mục tạm của runner: không bao giờ chạm
+  #      internal-portal/data/db.json (data của Node).
+  # ---------------------------------------------------------------------------
+  python-portal-tests:
+    name: Python portal tests (Flask, py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: internal-portal/python-portal/requirements.txt
+
+      - name: Install Flask deps (requirements.txt khai báo sẵn)
+        run: python -m pip install --disable-pip-version-check -r internal-portal/python-portal/requirements.txt
+
+      - name: Env cách ly (không Qdrant/Ollama, data tạm của runner)
+        env:
+          # Endpoint RAG bị chặn: test fail nếu có gọi network thật.
+          QDRANT_URL: http://127.0.0.1:1
+          OLLAMA_URL: http://127.0.0.1:1
+          OLLAMA_EMBED_MODEL: nomic-embed-text
+          OPENAI_API_KEY: ''
+        run: |
+          echo "DATA_FILE=$RUNNER_TEMP/flask-qa/db.json" >> "$GITHUB_ENV"
+          echo "PORT=5099" >> "$GITHUB_ENV"
+          echo "HOST=127.0.0.1" >> "$GITHUB_ENV"
+
+      - name: Unittest discovery (stdlib) — Flask isolation + RAG cache
+        working-directory: internal-portal/python-portal
+        run: python -m unittest discover -s . -p 'test_*.py' -v
+
+      - name: Không được sinh file backup/temp trong data của Node
+        run: |
+          set -euo pipefail
+          if ls internal-portal/data/*.bak internal-portal/data/*.migration-* \
+                internal-portal/data/db.json.tmp-* >/dev/null 2>&1; then
+            echo "❌ phát hiện file backup/temp trong internal-portal/data"
+            exit 1
+          fi
+          echo "✅ internal-portal/data sạch (không .bak / .migration-* / tmp)"
+
+  # ---------------------------------------------------------------------------
+  # 5b) Secret scanning — hard gate (default config). Fails the build on leaks.
+  # ---------------------------------------------------------------------------
+  gitleaks:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+
+  # ---------------------------------------------------------------------------
+  # 5c) Dependency audit for python-portal — ADVISORY (continue-on-error)
+  #     until triaged. The offline dev env means advisories cannot be
+  #     pre-triaged here, so a hard gate would fail the build on unactionable
+  #     findings. Ratchets to blocking (remove continue-on-error) after
+  #     triage — see HARD_TEST_REPORT.
+  # ---------------------------------------------------------------------------
+  pip-audit:
+    name: Dependency audit (pip-audit, python-portal, advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: internal-portal/python-portal/requirements.txt
+
+      - name: Run pip-audit (advisory — see job comment)
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+          pip-audit -r internal-portal/python-portal/requirements.txt
+
+  # ---------------------------------------------------------------------------
+  # ADDITIVE hardening (2026-09-27).
+  # NOTE: gitleaks hard gate already exists above as job 5b (no
+  # continue-on-error → blocking), so it is NOT duplicated here.
+  # 8) npm-audit — ADVISORY (continue-on-error: true): `npm audit
+  #    --audit-level=high` reports but never blocks, because transitive
+  #    advisories churn independently of this repo's code.
+  # 9) coverage-audit — ADVISORY (continue-on-error: true): c8 exists at
+  #    internal-portal/node_modules/.bin/c8 and live-guard is green locally
+  #    (node --test test/live-guard.test.js: 3/3 pass, 2026-09-27), BUT the
+  #    full suite is NOT green (270/275: OpenAPI-vs-routes contract,
+  #    route-inventory fail-closed, GET /metrics, inventory-55-routes fail).
+  #    So NO `--check-coverage` / lines-functions-branches thresholds are set —
+  #    this job publishes the text summary + lcov as artifacts only.
+  # ---------------------------------------------------------------------------
+  npm-audit:
+    name: npm audit (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: internal-portal
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: internal-portal/package-lock.json
+
+      - name: Install dependencies (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      # Advisory only: continue-on-error is on the JOB, so a HIGH+ advisory
+      # reports red-but-non-blocking instead of failing the PR.
+      - name: npm audit --audit-level=high (advisory, never blocks)
+        run: npm audit --audit-level=high || echo "::warning::npm audit found HIGH+ advisories (advisory only)"
+
+  coverage-audit:
+    name: Coverage audit (advisory, no thresholds)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: internal-portal
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: internal-portal/package-lock.json
+
+      - name: Install dependencies (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: c8 text summary (advisory — no --check-coverage, see job comment)
+        run: npx c8 --reporter=text node --test test/*.test.js || true
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: coverage-audit-lcov
+          path: internal-portal/coverage/lcov.info
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------------------
+  # 6) SonarQube Cloud scan (CI-based) — fix "last analysis has failed" của
   #    Automatic Analysis bằng cách quét chủ động từ CI.
   #    - Cần secret SONAR_TOKEN (SonarCloud → My Account → Security → Token).
   #    - Chưa có token → job skip êm, không làm đỏ CI.
@@ -138,12 +312,12 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - name: Checkout (full history cho blame/new-code)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Download coverage artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: coverage-lcov
           path: internal-portal/coverage

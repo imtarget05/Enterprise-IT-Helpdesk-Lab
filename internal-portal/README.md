@@ -1,14 +1,18 @@
-# IT Asset & Helpdesk Management Portal — v2.0.0
+# Enterprise IT Operations Platform — Internal Portal Module
 
-Ứng dụng web nội bộ quản lý **tài sản CNTT**, **ticket hỗ trợ (ITIL)** và **bản quyền phần mềm**, xây theo JD *Nhân viên IT (phần mềm nội bộ + IT Support)* — BMC Việt Nam / *IT Helpdesk* — OKIA.
+> `internal-portal/` là **module control plane phần mềm** trong project `Enterprise IT Operations Platform & Infrastructure Lab`,
+> cung cấp API/dashboard cho tài sản, license, ticket ITIL và AI copilot; nó không phải project độc lập.
+> Module này kết nối trực tiếp với hạ tầng AD/GPO/DNS/DHCP và bộ automation PowerShell/Python của cùng repo.
+
+Ứng dụng web nội bộ quản lý **tài sản CNTT**, **ticket hỗ trợ (ITIL)** và **bản quyền phần mềm**, phục vụ môi trường Enterprise IT Operations Platform.
 
 - **Backend:** Node.js 18+/22, Express 4, CORS — persistence file JSON nguyên tử, **0 dependency native**.
 - **Frontend:** SPA một trang (`public/`) — vanilla JS, dark mode, toast, skeleton, sort/filter, xuất CSV.
-- **Kiểm thử:** `160` test Node (`node:test`) + route inventory `55` route; `test-api.sh` chạy `68` smoke checks cho baseline REST, còn factory routes có integration tests riêng.
+- **Kiểm thử:** `269` test Node (`node:test`) + `79` test Flask (`python-portal/`, chạy cô lập với `DATA_FILE` riêng) + route inventory `55` route; `test-api.sh` chạy `68` smoke checks cho baseline REST, còn factory routes có integration tests riêng.
 - **Factory Operations:** 5 runbook (VLAN/firewall, AD/identity, monitoring, backup/DR, MiniERP) + 12 scenario có cấu trúc Mục tiêu/Điều kiện/Thao tác/Kết quả/Evidence.
 - **API contract:** `public/openapi.yaml` mô tả auth, ITSM, monitoring, MiniERP và audit; CI validate bằng `swagger-cli`.
 - **Evidence:** `artifacts/factory-it-upgrade/final/` chứa inventory, logs, scenario matrix và manifest (không chứa secret).
-- **Bảo mật:** lab auth dùng Bearer session/RBAC; `AUTH_MODE=lab`, `LAB_AUTH_USERS` và `MINIERP_INTEGRATION_KEY` chỉ nạp qua test/environment.
+- **Bảo mật:** lab auth dùng Bearer session/RBAC; `AUTH_MODE=lab`, `LAB_AUTH_USERS` và `MINIERP_INTEGRATION_KEY` chỉ nạp qua test/environment. Ở `AUTH_MODE=lab` người dùng đăng nhập qua form của portal để lấy Bearer token, và token đó mới mở được các route enterprise (tài sản, ITSM, audit) — đây là hành trình login thật mà `scripts/test-ui-e2e.sh` chạy bằng Playwright, không phải route public.
 - **Đóng gói:** Dockerfile multi-stage (non-root, healthcheck) + `docker-compose.yml`.
 
 ## 1. Chạy nhanh
@@ -20,7 +24,7 @@ npm start          # → http://localhost:3000
 
 Biến môi trường: `PORT` (3000), `HOST` (0.0.0.0), `DATA_DIR` (./data), `IT_WEBHOOK_URL` (tuỳ chọn),
 `AUTH_MODE` (`legacy` hoặc `lab`), `LAB_AUTH_USERS` (JSON chỉ dùng lab/test), `MINIERP_INTEGRATION_KEY` (key riêng cho receiver),
-`OLLAMA_URL` (`http://127.0.0.1:11434`), `OLLAMA_MODEL` (`qwen2.5:3b`) — cho trợ lý AI local.
+`OPENAI_API_KEY`/`OPENAI_MODEL` (OpenAI tuỳ chọn), `OLLAMA_URL` (`http://127.0.0.1:11434`), `OLLAMA_MODEL` (`qwen2.5:3b`) — các tầng AI fallback.
 
 ```bash
 npm run dev        # node --watch, tự reload khi sửa code
@@ -52,11 +56,13 @@ docker run -d -p 3000:3000 -v "$PWD/internal-portal/data:/app/data" --name it-po
 
 | Lệnh | Nội dung |
 |---|---|
-| `npm test` | **160 test PASS**: store/CSV/notifier, integration HTTP thật, persistence, UI/API contract, ITSM/RBAC/monitoring/MiniERP, static docs mounts, Docker packaging và PowerShell lint/mutation |
+| `npm test` | **269 test PASS**: store/CSV/notifier, integration HTTP thật, persistence, UI/API contract, ITSM/RBAC/monitoring/MiniERP, static docs mounts, Docker packaging và PowerShell lint/mutation |
+| `cd python-portal && DATA_FILE=<tmp>/db.json PORT=0 python3 -m unittest discover -s . -p 'test_*.py'` | **79 test PASS** cho cổng Flask (`python-portal/app.py`), chạy trên `DATA_FILE` tạm nên không chạm `data/db.json` của Node |
 | `npm run test:api` (hoặc `./test-api.sh`) | Smoke test **curl** gồm `68` check baseline REST, in bảng PASS/FAIL, tự boot server trên port riêng với data tạm, exit code 0/1 |
 | `PORT=3210 ./test-api.sh` | Như trên nhưng chọn port khác |
 | `BASE_URL=http://localhost:3000 ./test-api.sh` | Đánh vào server/container **đang chạy thật** |
 | `bash scripts/verify-ps1-syntax.sh` | Parse **8** file `.ps1` bằng AST parser PowerShell thật (dùng pwsh local hoặc Docker); nếu thiếu runner, dùng fallback npm test |
+| `QA_ROOT=… PORTAL_ROOT=… scripts/test-ui-e2e.sh` | Browser E2E (Playwright) cho journey legacy và journey `AUTH_MODE=lab`: đăng nhập bằng user lab, tạo ticket, kiểm tra console không có lỗi và không có request same-origin thất bại |
 
 Ví dụ kết thúc của `test-api.sh`:
 
@@ -109,7 +115,7 @@ fixtures/            db.baseline.json — snapshot dữ liệu demo để restor
 *IT Assets: tìm kiếm, lọc loại/trạng thái, xuất CSV, cấp phát/thu hồi/xóa.*
 
 ![AI Analysis](../docs/images/portal-ai-analysis.png)
-*AI phân tích ticket #1001 (không có Ollama → playbook offline, engine badge rõ ràng).*
+*AI phân tích ticket #1001 (không có OpenAI key/Ollama → playbook offline, engine badge rõ ràng).*
 
 ![Licenses](../docs/images/portal-licenses.png)
 *Software Licenses: tổng/đã cấp/còn lại, tỷ lệ sử dụng, hạn renewal — AutoCAD 100% Hết.*
@@ -132,8 +138,11 @@ fixtures/            db.baseline.json — snapshot dữ liệu demo để restor
 | PATCH | `/api/tickets/:id/status` | Open → In Progress → Resolved/Closed (+ `resolvedAt`) |
 | GET | `/api/licenses` `/api/licenses/:id` | bản quyền + `utilizationPercent` |
 | GET | `/api/notifications` | hàng đợi cảnh báo đã gửi (`?limit=`) |
-| GET | `/api/ai/status` | trạng thái trợ lý AI: engine `ollama` hay `rule-based`, model, list model đã tải |
-| POST | `/api/ai/analyze` | phân tích ticket (`{ticketId}` hoặc `{title,...}`) → summary/diagnosis/rca/prevention; fallback rule-based khi Ollama không chạy |
+| GET | `/api/ai/status` | trạng thái trợ lý AI: engine `openai`, `ollama` hoặc `rule-based`, model và provider reachability |
+| POST | `/api/ai/analyze` | phân tích ticket (`{ticketId}` hoặc `{title,...}`) → summary/diagnosis/rca/prevention; OpenAI → Ollama → rule-based fallback |
+| POST | `/api/ai/agent` | **agentic loop** PLAN→ACT→OBSERVE: agent tự chọn tool, tra dữ liệu thật; hành động ghi trả `needs_approval` + token duyệt |
+| GET | `/api/ai/agent/status` | năng lực agent: engine, tool registry (tool nào `autoAllowed`, tool nào cần duyệt), số phiên/ký ức |
+| POST | `/api/ai/agent/approve` | phê duyệt/từ chối hành động ghi mà agent đề xuất — **điểm duy nhất** tool side-effect chạy |
 | * | sai đường dẫn/`/api/*` | 404 JSON; sai method → 405 + `Allow` |
 
 ### Webhook alert (mock → thật)
@@ -144,21 +153,69 @@ Trỏ vào Slack/Teams/Mattermost thật:
 IT_WEBHOOK_URL="https://hooks.slack.com/services/XXX/YYY/ZZZ" npm start
 ```
 
-### 🤖 AI Assistant — LLM local (Ollama, **không dùng OpenAI**)
+### 🤖 AI Assistant — OpenAI (tuỳ chọn) → Ollama local → offline playbook
 
 ```bash
+# Tầng 1: OpenAI cloud (chỉ khi có OPENAI_API_KEY trong environment)
+OPENAI_API_KEY=... npm start
+
+# Tầng 2: LLM local qua Ollama
 ollama pull qwen2.5:3b        # hoặc llama3.2:3b
 ollama serve                  # http://127.0.0.1:11434
 OLLAMA_URL=http://127.0.0.1:11434 npm start
+
 curl -s localhost:3000/api/ai/status
 curl -s -X POST localhost:3000/api/ai/analyze -H 'Content-Type: application/json' -d '{"ticketId":1001}'
 ```
 
-- `GET /api/ai/status` → engine `ollama` (reachable) hay `rule-based` (offline) + list model đã tải.
-- `POST /api/ai/analyze` → `{ticketId}` (404 nếu không tồn tại) hoặc `{title, requester?, dept?, priority?, category?}` (thiếu cả hai → 400).
-- Kết quả 4 phần ITIL: `summary`, `diagnosis[]`, `rca`, `prevention[]` + `engine`, `playbook`, `fallbackReason`, `generatedAt`.
-- Ollama không chạy / timeout / JSON hỏng → **fail-soft** sang playbook rule-based offline ([`src/ai-playbooks.js`](src/ai-playbooks.js)), endpoint vẫn 200.
-- UI: tab Helpdesk Tickets → nút **🤖 AI** trên mỗi ticket (modal hiển thị đủ 4 phần).
+- `GET /api/ai/status` → engine `openai`, `ollama` hoặc `rule-based`, model và trạng thái provider.
+- `POST /api/ai/analyze` → `{ticketId}` hoặc `{title, requester?, dept?, priority?, category?}`; trả summary, diagnosis, RCA, prevention theo ITIL.
+- OpenAI lỗi/timeout → chuyển sang Ollama local; không có model → **fail-soft** sang playbook rule-based offline (`src/ai-playbooks.js`), endpoint vẫn trả 200.
+- UI: tab Helpdesk Tickets → nút **🤖 AI** trên mỗi ticket; AI chỉ advisory, không tự thực hiện lệnh thay đổi AD/GPO.
+
+### 🧠 Agentic runtime — từ "trả lời" sang "làm việc"
+
+`POST /api/ai/analyze` gọi LLM **một lần** rồi trả kết quả. `POST /api/ai/agent` thì
+khác: agent **tự chọn tool và gọi thật trên dữ liệu portal**.
+
+```
+PLAN     → đưa tool cho LLM, LLM chọn tool + tham số
+ACT      → chạy tool ĐỌC (search_tickets, get_ticket, find_assets, search_knowledge)
+OBSERVE  → kết quả tool quay lại prompt, LLM quyết định bước kế tiếp (≤ maxSteps)
+UPDATE   → dựng câu trả lời, ghi session memory, học long-term memory
+```
+
+```bash
+# Câu hỏi chỉ đọc — agent tự tra cứu, trả về luôn
+curl -s -X POST localhost:3000/api/ai/agent -H 'Content-Type: application/json' \
+  -d '{"question":"Ticket 1001 đang ở trạng thái nào? có breach SLA không?"}'
+
+# Yêu cầu ghi dữ liệu — agent CHỈ ĐỀ XUẤT, chưa tạo ticket
+curl -s -X POST localhost:3000/api/ai/agent -H 'Content-Type: application/json' \
+  -d '{"question":"Tạo ticket cho máy in phòng kế toán bị kẹt giấy"}'
+# → {"status":"needs_approval","proposedAction":{"tool":"create_ticket","token":"act_..."}}
+
+# Người dùng duyệt → ticket thực sự được tạo
+curl -s -X POST localhost:3000/api/ai/agent/approve -H 'Content-Type: application/json' \
+  -d '{"token":"act_..."}'
+```
+
+**Kiểm soát hành động** (điểm khó nhất khi đưa agent vào production, xem
+`src/agent/guardrails.js`):
+
+- Tool `sideEffect` (`create_ticket`, `add_work_note`) **không bao giờ tự chạy** —
+  kể cả khi LLM yêu cầu. `tools.invoke()` chặn ở tầng registry, độc lập với prompt.
+- Tham số được **đóng băng lúc đề xuất**: người duyệt đúng cái agent đã hiển thị.
+- Token một lần dùng, tự hết hạn (15 phút), không replay được.
+- LLM lỗi/JSON hỏng/offline → rơi về rule-based playbook, endpoint vẫn trả 200.
+
+**Guardrails**: câu hỏi chứa chỉ dẫn prompt-injection bị chặn (`status: blocked`);
+output được lọc secret trước khi trả về; long-term memory tách theo `(user, tenant)`
+để không rò chéo người dùng.
+
+Mã nguồn: `src/agent/` — `tools.js` (registry), `orchestrator.js` (vòng lặp),
+`memory.js` (session + LTM), `guardrails.js` (3 lớp kiểm soát), `llm.js` (client
+nhiều tầng), `index.js` (factory). Test: `test/agent-runtime.test.js`.
 
 ## 5. Ghi chú nghiệp vụ (ITIL)
 - Vòng đời tài sản: `Active ⇄ In Storage`, `Maintenance`, `Retired`; nút **Cấp phát / Thu hồi** trên bảng.

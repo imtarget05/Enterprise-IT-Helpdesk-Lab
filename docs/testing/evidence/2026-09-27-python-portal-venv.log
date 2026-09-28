@@ -1,0 +1,93 @@
+......................[2026-09-28 09:54:07,586] ERROR in app: save assets thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 544, in create_asset
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_atomic_mutations.py", line 105, in boom
+    raise OSError(28, "No space left on device", str(self.data_file))
+OSError: [Errno 28] No space left on device: '/var/folders/m7/w56x1xys4j115w05ck2p7kx00000gn/T/w6-flask-p2ukhu11/data/db.json'
+.[2026-09-28 09:54:07,609] ERROR in app: save ticket status thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 611, in update_ticket
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_atomic_mutations.py", line 105, in boom
+    raise OSError(28, "No space left on device", str(self.data_file))
+OSError: [Errno 28] No space left on device: '/var/folders/m7/w56x1xys4j115w05ck2p7kx00000gn/T/w6-flask-r39neo1g/data/db.json'
+.[2026-09-28 09:54:07,629] ERROR in app: save assets thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 544, in create_asset
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_atomic_mutations.py", line 105, in boom
+    raise OSError(28, "No space left on device", str(self.data_file))
+OSError: [Errno 28] No space left on device: '/var/folders/m7/w56x1xys4j115w05ck2p7kx00000gn/T/w6-flask-iuzemame/data/db.json'
+.[2026-09-28 09:54:07,756] ERROR in app: save tickets thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 585, in create_ticket
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_atomic_mutations.py", line 105, in boom
+    raise OSError(28, "No space left on device", str(self.data_file))
+OSError: [Errno 28] No space left on device: '/var/folders/m7/w56x1xys4j115w05ck2p7kx00000gn/T/w6-flask-hv7c4ea3/data/db.json'
+..................[2026-09-28 09:54:08,819] ERROR in app: save assets thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 544, in create_asset
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_concurrency.py", line 174, in boom
+    raise OSError(28, "No space left on device", "simulated")
+OSError: [Errno 28] No space left on device: 'simulated'
+[2026-09-28 09:54:08,821] ERROR in app: save assets thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 544, in create_asset
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_concurrency.py", line 174, in boom
+    raise OSError(28, "No space left on device", "simulated")
+OSError: [Errno 28] No space left on device: 'simulated'
+[2026-09-28 09:54:08,825] ERROR in app: save assets thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 544, in create_asset
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_concurrency.py", line 174, in boom
+    raise OSError(28, "No space left on device", "simulated")
+OSError: [Errno 28] No space left on device: 'simulated'
+[2026-09-28 09:54:08,826] ERROR in app: save assets thất bại
+Traceback (most recent call last):
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 544, in create_asset
+    _persist(snapshot)
+    ~~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/app.py", line 354, in _persist
+    save_db(snapshot)
+    ~~~~~~~^^^^^^^^^^
+  File "/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/python-portal/tests/test_concurrency.py", line 174, in boom
+    raise OSError(28, "No space left on device", "simulated")
+OSError: [Errno 28] No space left on device: 'simulated'
+..........................................
+----------------------------------------------------------------------
+Ran 85 tests in 38.402s
+
+OK

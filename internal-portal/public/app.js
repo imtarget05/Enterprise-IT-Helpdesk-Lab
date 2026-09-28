@@ -15,7 +15,14 @@ const state = {
   assetSort: { key: null, dir: 1 },
   ticketSort: { key: 'id', dir: -1 },
   loading: { assets: true, tickets: true, licenses: true },
+  // Chế độ auth do /api/health công bố: 'legacy' (demo) hoặc 'lab' (cần Bearer).
+  authMode: 'legacy',
+  user: null,
 };
+
+// Access token CHỈ nằm trong sessionStorage: mất khi đóng tab, không đọc được bởi
+// script khác trên cùng origin lâu dài, không nằm trong localStorage/URL/console.
+const AUTH_TOKEN_KEY = 'it-portal-token';
 
 const $ = (id) => document.getElementById(id);
 const escapeHtml = (v) =>
@@ -45,6 +52,73 @@ function toast(message, type = 'info', ms = 3800) {
   setTimeout(remove, ms);
 }
 
+// --------------------------- Auth helpers ---------------------------
+function getToken() {
+  try {
+    return sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+  } catch (err) {
+    return '';
+  }
+}
+
+function setToken(token) {
+  try {
+    if (token) sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+    else sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch (err) {
+    /* storage bị chặn (private mode) → coi như không có session */
+  }
+}
+
+/** data-auth: legacy | anonymous | authenticated | unauthorized */
+function renderAuthState(name) {
+  document.documentElement.setAttribute('data-auth', name);
+  const panel = $('auth-panel');
+  const identity = $('auth-identity');
+  if (panel) panel.hidden = name !== 'anonymous' && name !== 'unauthorized';
+  if (identity) identity.hidden = name !== 'authenticated';
+  const user = $('auth-user');
+  if (user && state.user) user.textContent = `${state.user.username} · ${state.user.role}`;
+}
+
+/**
+ * Xoá sạch dữ liệu protected đã render. Logout (và phiên chết) không được để
+ * lại bảng tài sản/ticket/bản quyền của người dùng trước đó hiện sau panel
+ * đăng nhập — đó là dữ liệu của phiên đã kết thúc.
+ */
+function clearProtectedViews() {
+  state.assets = [];
+  state.tickets = [];
+  state.licenses = [];
+  state.user = null;
+  renderAssetRows();
+  renderTicketRows();
+  renderRecentTickets();
+  emptyRow('licenses-tbody', 6, 'Chưa có dữ liệu bản quyền.');
+  ['operations-monitoring-list', 'operations-itsm-list', 'operations-access-list'].forEach((id) => {
+    const box = $(id);
+    if (box) box.innerHTML = '';
+  });
+  ['ops-monitoring-count', 'ops-itsm-count', 'ops-access-count'].forEach((id) => {
+    const el = $(id);
+    if (el) el.textContent = '0';
+  });
+  const user = $('auth-user');
+  if (user) user.textContent = 'Chưa đăng nhập';
+}
+
+function showAuthMessage(message) {
+  const box = $('auth-error');
+  if (!box) return;
+  if (!message) {
+    box.hidden = true;
+    box.textContent = '';
+    return;
+  }
+  box.textContent = message;
+  box.hidden = false;
+}
+
 // --------------------------- API layer -----------------------------
 function setOffline(offline) {
   const banner = $('offline-banner');
@@ -60,14 +134,26 @@ function setOffline(offline) {
 
 /** fetch + chuẩn hoá lỗi: ném Error mang thông điệp tiếng Việt từ backend. */
 async function api(path, options = {}) {
+  // Mọi request đi qua đây nên Bearer chỉ được chèn ở đúng một chỗ.
+  const token = getToken();
+  const headers = Object.assign({}, options.headers || {});
+  if (token && !path.startsWith('/api/auth/login')) headers.Authorization = `Bearer ${token}`;
+
   let res;
   try {
-    res = await fetch(path, options);
+    res = await fetch(path, Object.assign({}, options, { headers }));
   } catch (networkErr) {
     setOffline(true);
     throw new Error('Không kết nối được máy chủ API (server chưa chạy hoặc mất mạng).');
   }
   setOffline(false);
+  if (res.status === 401 && !path.startsWith('/api/auth/')) {
+    // Token hết hạn / bị thu hồi: xoá ngay và đưa UI về trạng thái cần đăng nhập.
+    setToken('');
+    state.user = null;
+    renderAuthState('unauthorized');
+    showAuthMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+  }
   if (!res.ok) {
     let reason = `Lỗi HTTP ${res.status}`;
     let details = null;
@@ -572,8 +658,8 @@ function renderTicketRows() {
 }
 
 /**
- * AI Phân Tích Ticket — gọi POST /api/ai/analyze (LLM LOCAL qua Ollama,
- * fallback playbook rule-based khi model không khả dụng). Render kết quả
+ * AI Phân Tích Ticket — gọi POST /api/ai/analyze (OpenAI tuỳ chọn → Ollama local,
+ * fallback playbook rule-based khi provider không khả dụng). Render kết quả
  * 4 phần ITIL vào modal #ai-modal.
  */
 async function analyzeTicket(id) {
@@ -842,21 +928,127 @@ function setupToolbar() {
 }
 
 // ------------------------------ Boot -------------------------------
-document.addEventListener('DOMContentLoaded', () => {
+/** Nạp một lần toàn bộ dữ liệu các tab (dùng lại sau login / logout). */
+async function loadAllData() {
+  await Promise.all([fetchStats(), fetchAssets(), fetchTickets(), fetchLicenses(), fetchAlerts(), fetchOperations()]);
+}
+
+/** Login / logout + hiển thị trạng thái auth. */
+function setupAuth() {
+  const form = $('login-form');
+  if (form) {
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      // state.authMode chỉ hữu ích nếu được dùng để chặn: ở legacy mode không có
+      // endpoint login đáng gọi, panel cũng đang ẩn.
+      if (state.authMode !== 'lab') return;
+      const button = $('btn-login');
+      const username = $('auth-username').value.trim();
+      const password = $('auth-password').value;
+      showAuthMessage('');
+      if (button) button.disabled = true;
+      try {
+        const session = await apiJson('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        setToken(session.token);
+        state.user = { username: session.username, role: session.role };
+        $('auth-password').value = '';
+        renderAuthState('authenticated');
+        toast(`Đã đăng nhập với vai trò ${session.role}.`, 'success');
+        await loadAllData();
+      } catch (err) {
+        // Login sai: tuyệt đối không lưu token, chỉ hiện lỗi.
+        setToken('');
+        state.user = null;
+        showAuthMessage(err.message);
+      } finally {
+        if (button) button.disabled = false;
+      }
+    };
+  }
+
+  const logoutBtn = $('btn-logout');
+  if (logoutBtn) {
+    logoutBtn.onclick = async () => {
+      try {
+        await apiJson('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (err) {
+        // Token đã hết hạn: vẫn phải thoát phiên phía trình duyệt.
+      }
+      setToken('');
+      clearProtectedViews();
+      renderAuthState('unauthorized');
+      showAuthMessage('Đã đăng xuất. Token đã xoá khỏi phiên trình duyệt.');
+      toast('Đã đăng xuất.', 'info');
+    };
+  }
+}
+
+/** Đọc authMode từ /api/health rồi quyết định có cần login hay không. */
+async function bootAuth() {
+  let health = null;
+  try {
+    health = await apiJson('/api/health');
+  } catch (err) {
+    health = null;
+  }
+  if (!health) {
+    // Không gọi được /api/health thì KHÔNG được đoán là lab: một deployment
+    // legacy mà API chết sẽ không mọc panel "Lab Mode" lên giữa dù data sẽ về
+    // sớm. Trạng thái riêng 'offline' + banner offline là trung thực hơn.
+    renderAuthState('offline');
+    return 'offline';
+  }
+  state.authMode = String(health.authMode || 'legacy').toLowerCase();
+  if (state.authMode !== 'lab') {
+    renderAuthState('legacy');
+    return 'legacy';
+  }
+  if (getToken()) {
+    try {
+      const me = await apiJson('/api/auth/me');
+      state.user = me.user;
+      renderAuthState('authenticated');
+      return 'lab-authenticated';
+    } catch (err) {
+      // Có token trong storage nhưng server không chấp nhận (hết hạn / bị thu
+      // hồi / server restart làm mất danh sách token). Đây là "unauthorized",
+      // KHÁC hẳn "anonymous" — người dùng ĐÃ từng đăng nhập, chỉ là phiên chết.
+      setToken('');
+      clearProtectedViews();
+      renderAuthState('unauthorized');
+      showAuthMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      return 'lab-unauthorized';
+    }
+  }
+  renderAuthState('anonymous');
+  showAuthMessage('Cần đăng nhập để xem dữ liệu portal (chế độ lab).');
+  return 'lab-anonymous';
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   setupNavigation();
   setupModals();
   setupToolbar();
-
-  fetchStats();
-  fetchAssets();
-  fetchTickets();
-  fetchLicenses();
-  fetchAlerts();
-  fetchOperations();
+  setupAuth();
 
   const clock = $('clock');
   setInterval(() => {
     if (clock && $('offline-banner') && $('offline-banner').hidden) clock.textContent = new Date().toLocaleTimeString('vi-VN');
   }, 1000);
+
+  const mode = await bootAuth();
+  if (mode !== 'legacy' && mode !== 'lab-authenticated') {
+    // Chưa có token hợp lệ: KHÔNG bắn protected API (sẽ 401) và không coi là tải xong.
+    clearProtectedViews();
+    return;
+  }
+  await loadAllData();
 });
 

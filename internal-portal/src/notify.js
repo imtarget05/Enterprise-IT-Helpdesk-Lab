@@ -50,10 +50,22 @@ function createNotifier(options = {}) {
       );
     },
 
-    async alert(ticket) {
+    async alert(ticket, contract = {}) {
       if (!this.shouldAlert(ticket)) {
         return { alerted: false, reason: 'priority-below-threshold' };
       }
+      const callerSignal = contract && contract.signal;
+      if (callerSignal && callerSignal.aborted) {
+        return { alerted: false, reason: 'notifier-aborted', delivered: false, deliveryError: 'aborted-before-alert' };
+      }
+      // The caller's abort listener is registered BEFORE the first await, so an
+      // abort that lands while the notification log is being written still
+      // reaches the webhook fetch below instead of being missed. A signal that
+      // was already aborted at registration time will not fire the listener
+      // again, so `aborted` is re-checked after the log I/O as well.
+      const controller = new AbortController();
+      const abortFromCaller = () => controller.abort(callerSignal && callerSignal.reason);
+      if (callerSignal) callerSignal.addEventListener('abort', abortFromCaller, { once: true });
 
       const message = this.buildMessage(ticket);
       const entry = {
@@ -71,39 +83,57 @@ function createNotifier(options = {}) {
       history.unshift(entry);
       if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
 
-      // 3) Lưu vết kiểm toán ra đĩa — failures chỉ cảnh báo, không ném.
+      let timer;
       try {
-        await fs.mkdir(dataDir, { recursive: true });
-        await fs.appendFile(logFile, `${message}\n`, 'utf8');
-      } catch (err) {
-        console.warn(`[notify] không ghi được notifications.log: ${err.message}`);
-      }
-
-      // 4) Webhook thật (tuỳ chọn) — mock vẫn PASS nếu không cấu hình.
-      let delivered = null;
-      let deliveryError = null;
-      if (webhookUrl) {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+        // 3) Lưu vết kiểm toán ra đĩa — failures chỉ cảnh báo, không ném.
         try {
-          const res = await fetch(webhookUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: message }),
-            signal: controller.signal,
-          });
-          delivered = res.ok;
-          if (!res.ok) deliveryError = `HTTP ${res.status}`;
+          await fs.mkdir(dataDir, { recursive: true });
+          await fs.appendFile(logFile, `${message}\n`, 'utf8');
         } catch (err) {
-          delivered = false;
-          deliveryError = err.name === 'AbortError' ? `timeout>${WEBHOOK_TIMEOUT_MS}ms` : err.message;
-        } finally {
-          clearTimeout(timer);
+          console.warn(`[notify] không ghi được notifications.log: ${err.message}`);
         }
-      }
 
-      this.lastDelivery = { at: entry.at, ok: delivered, error: deliveryError };
-      return { alerted: true, delivered, deliveryError, channels: entry.channels };
+        // The log write above is awaited, so the caller may have given up during
+        // it. Re-check before spending a real network request.
+        if (callerSignal && callerSignal.aborted) {
+          this.lastDelivery = { at: entry.at, ok: null, error: 'aborted-before-webhook' };
+          return { alerted: false, reason: 'notifier-aborted', delivered: false, deliveryError: 'aborted-before-webhook', channels: entry.channels };
+        }
+
+        // 4) Webhook thật (tuỳ chọn) — mock vẫn PASS nếu không cấu hình.
+        let delivered = null;
+        let deliveryError = null;
+        if (webhookUrl) {
+          const deadline = Number(contract && contract.deadline);
+          const remaining = Number.isFinite(deadline) ? Math.max(0, deadline - Date.now()) : WEBHOOK_TIMEOUT_MS;
+          if (remaining === 0) controller.abort(new Error('notifier-deadline'));
+          else timer = setTimeout(() => controller.abort(new Error('notifier-timeout')), Math.min(WEBHOOK_TIMEOUT_MS, remaining));
+          try {
+            const res = await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: message }),
+              signal: controller.signal,
+            });
+            delivered = res.ok;
+            if (!res.ok) deliveryError = `HTTP ${res.status}`;
+          } catch (err) {
+            delivered = false;
+            deliveryError = callerSignal && callerSignal.aborted
+              ? 'notifier-aborted'
+              : (err.name === 'AbortError' ? `timeout>${Math.min(WEBHOOK_TIMEOUT_MS, remaining)}ms` : err.message);
+          }
+        }
+
+        this.lastDelivery = { at: entry.at, ok: delivered, error: deliveryError };
+        if (callerSignal && callerSignal.aborted) {
+          return { alerted: false, reason: 'notifier-aborted', delivered, deliveryError, channels: entry.channels };
+        }
+        return { alerted: true, delivered, deliveryError, channels: entry.channels };
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (callerSignal) callerSignal.removeEventListener('abort', abortFromCaller);
+      }
     },
 
     history(limit = HISTORY_LIMIT) {

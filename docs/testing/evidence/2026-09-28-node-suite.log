@@ -1,0 +1,2161 @@
+
+> enterprise-it-asset-portal@2.0.0 test
+> node --test test/*.test.js --run
+
+TAP version 13
+# Subtest: tools.js: invoke tool ghi KHÔNG có ctx.approved thì bị chặn, không ghi gì
+ok 1 - tools.js: invoke tool ghi KHÔNG có ctx.approved thì bị chặn, không ghi gì
+  ---
+  duration_ms: 572.678658
+  type: 'test'
+  ...
+# Subtest: tools.js: invoke tool ghi với ctx.approved mới ghi dữ liệu thật
+ok 2 - tools.js: invoke tool ghi với ctx.approved mới ghi dữ liệu thật
+  ---
+  duration_ms: 235.660933
+  type: 'test'
+  ...
+# Subtest: tools.js: isAutoAllowed chỉ true cho tool đọc, tool ghi luôn false
+ok 3 - tools.js: isAutoAllowed chỉ true cho tool đọc, tool ghi luôn false
+  ---
+  duration_ms: 71.55594
+  type: 'test'
+  ...
+# Subtest: guardrails: approval gate đóng băng args, chặn replay, tôn trọng TTL
+ok 4 - guardrails: approval gate đóng băng args, chặn replay, tôn trọng TTL
+  ---
+  duration_ms: 6.997316
+  type: 'test'
+  ...
+# Subtest: orchestrator: hành động ghi chỉ được ĐỀ XUẤT, chưa ghi — approve mới ghi
+ok 5 - orchestrator: hành động ghi chỉ được ĐỀ XUẤT, chưa ghi — approve mới ghi
+  ---
+  duration_ms: 271.004016
+  type: 'test'
+  ...
+# Subtest: orchestrator: token duyệt chỉ dùng được một lần (chống replay tạo ticket trùng)
+ok 6 - orchestrator: token duyệt chỉ dùng được một lần (chống replay tạo ticket trùng)
+  ---
+  duration_ms: 240.576874
+  type: 'test'
+  ...
+# Subtest: orchestrator: LLM tự chọn tool ghi vẫn bị chặn, không chạy âm thầm
+ok 7 - orchestrator: LLM tự chọn tool ghi vẫn bị chặn, không chạy âm thầm
+  ---
+  duration_ms: 95.236148
+  type: 'test'
+  ...
+# Subtest: guardrails: input chặn prompt injection (tiếng Việt và tiếng Anh)
+ok 8 - guardrails: input chặn prompt injection (tiếng Việt và tiếng Anh)
+  ---
+  duration_ms: 0.601994
+  type: 'test'
+  ...
+# Subtest: guardrails: input chặn rỗng, quá dài, ký tự điều khiển
+ok 9 - guardrails: input chặn rỗng, quá dài, ký tự điều khiển
+  ---
+  duration_ms: 0.632896
+  type: 'test'
+  ...
+# Subtest: guardrails: output lọc secret, cắt độ dài, bắt buộc có căn cứ
+ok 10 - guardrails: output lọc secret, cắt độ dài, bắt buộc có căn cứ
+  ---
+  duration_ms: 0.721576
+  type: 'test'
+  ...
+# Subtest: memory: LTM chỉ học từ câu tự khai, không tự bịa từ nội dung ticket
+ok 11 - memory: LTM chỉ học từ câu tự khai, không tự bịa từ nội dung ticket
+  ---
+  duration_ms: 0.369668
+  type: 'test'
+  ...
+# Subtest: memory: LTM tách theo (user, tenant) — không rò chéo người dùng
+ok 12 - memory: LTM tách theo (user, tenant) — không rò chéo người dùng
+  ---
+  duration_ms: 0.661657
+  type: 'test'
+  ...
+# Subtest: memory: LTM dedupe, ltmEnabled=false thì mọi thao tác là no-op
+ok 13 - memory: LTM dedupe, ltmEnabled=false thì mọi thao tác là no-op
+  ---
+  duration_ms: 0.264919
+  type: 'test'
+  ...
+# Subtest: memory: session lưu lịch sử và rút gọn theo ngân sách ký tự
+ok 14 - memory: session lưu lịch sử và rút gọn theo ngân sách ký tự
+  ---
+  duration_ms: 0.337508
+  type: 'test'
+  ...
+# Subtest: memory: LTM sống sót qua restart thật (ghi/đọc file agent-memory.json)
+ok 15 - memory: LTM sống sót qua restart thật (ghi/đọc file agent-memory.json)
+  ---
+  duration_ms: 23.187759
+  type: 'test'
+  ...
+# Subtest: orchestrator: vòng lặp PLAN→ACT→OBSERVE ghi đủ trace và trả evidence
+ok 16 - orchestrator: vòng lặp PLAN→ACT→OBSERVE ghi đủ trace và trả evidence
+  ---
+  duration_ms: 2502.22999
+  type: 'test'
+  ...
+# Subtest: orchestrator: LLM điều khiển vòng lặp — bước 1 gọi tool, bước 2 trả lời
+ok 17 - orchestrator: LLM điều khiển vòng lặp — bước 1 gọi tool, bước 2 trả lời
+  ---
+  duration_ms: 57.023013
+  type: 'test'
+  ...
+# Subtest: orchestrator: LLM hỏng JSON thì rơi về rule-based, không throw ra ngoài
+ok 18 - orchestrator: LLM hỏng JSON thì rơi về rule-based, không throw ra ngoài
+  ---
+  duration_ms: 254.494038
+  type: 'test'
+  ...
+# Subtest: orchestrator: LLM ném lỗi mạng thì fallback rule-based, không 500
+ok 19 - orchestrator: LLM ném lỗi mạng thì fallback rule-based, không 500
+  ---
+  duration_ms: 105.233827
+  type: 'test'
+  ...
+# Subtest: orchestrator: dừng sau maxSteps, không lặp vô hạn khi LLM cứ chọn tool
+ok 20 - orchestrator: dừng sau maxSteps, không lặp vô hạn khi LLM cứ chọn tool
+  ---
+  duration_ms: 191.366845
+  type: 'test'
+  ...
+# Subtest: orchestrator: giữ nguyên guardrail khi chạy vòng lặp (injection bị chặn)
+ok 21 - orchestrator: giữ nguyên guardrail khi chạy vòng lặp (injection bị chặn)
+  ---
+  duration_ms: 111.175
+  type: 'test'
+  ...
+# Subtest: orchestrator: học ký ức dài hạn từ lời người dùng trong lượt đó
+ok 22 - orchestrator: học ký ức dài hạn từ lời người dùng trong lượt đó
+  ---
+  duration_ms: 59.584371
+  type: 'test'
+  ...
+# Subtest: orchestrator: parseAgentJson chịu được model bọc markdown
+ok 23 - orchestrator: parseAgentJson chịu được model bọc markdown
+  ---
+  duration_ms: 0.24892
+  type: 'test'
+  ...
+# Subtest: tools: search_tickets lọc theo từ khoá và ưu tiên ticket mức cao trước
+ok 24 - tools: search_tickets lọc theo từ khoá và ưu tiên ticket mức cao trước
+  ---
+  duration_ms: 109.557011
+  type: 'test'
+  ...
+# Subtest: tools: get_ticket trả chi tiết + SLA; ticket không tồn tại trả not_found
+ok 25 - tools: get_ticket trả chi tiết + SLA; ticket không tồn tại trả not_found
+  ---
+  duration_ms: 132.174628
+  type: 'test'
+  ...
+# Subtest: tools: invoke tên tool không tồn tại trả unknown_tool, không throw
+ok 26 - tools: invoke tên tool không tồn tại trả unknown_tool, không throw
+  ---
+  duration_ms: 60.715041
+  type: 'test'
+  ...
+# Subtest: tools: create_ticket chuẩn hoá priority/category, không ghi rác
+ok 27 - tools: create_ticket chuẩn hoá priority/category, không ghi rác
+  ---
+  duration_ms: 394.020378
+  type: 'test'
+  ...
+# [api] GET /api/ai/agent/status → 200
+# Subtest: GET /api/ai/agent/status — báo cáo tool, engine và policy side-effect
+ok 28 - GET /api/ai/agent/status — báo cáo tool, engine và policy side-effect
+  ---
+  duration_ms: 111.163422
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent → 200
+# Subtest: POST /api/ai/agent — câu hỏi chỉ đọc trả 200 với status answered
+ok 29 - POST /api/ai/agent — câu hỏi chỉ đọc trả 200 với status answered
+  ---
+  duration_ms: 756.262053
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent → 400
+# Subtest: POST /api/ai/agent — thiếu question trả 400 với chi tiết lỗi
+ok 30 - POST /api/ai/agent — thiếu question trả 400 với chi tiết lỗi
+  ---
+  duration_ms: 295.515789
+  type: 'test'
+  ...
+# [api] GET /api/tickets → 200
+# [api] POST /api/ai/agent → 200
+# [api] GET /api/tickets → 200
+# Subtest: POST /api/ai/agent — hành động ghi trả needs_approval, chưa tạo ticket
+ok 31 - POST /api/ai/agent — hành động ghi trả needs_approval, chưa tạo ticket
+  ---
+  duration_ms: 387.378752
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent → 200
+# Subtest: POST /api/ai/agent — prompt injection bị chặn, trả blocked chứ không 500
+ok 32 - POST /api/ai/agent — prompt injection bị chặn, trả blocked chứ không 500
+  ---
+  duration_ms: 421.070875
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent → 200
+# [api] GET /api/tickets → 200
+# [api] POST /api/ai/agent/approve → 200
+# [api] GET /api/tickets → 200
+# [api] POST /api/ai/agent/approve → 404
+# Subtest: POST /api/ai/agent/approve — duyệt thì ticket thực sự được tạo
+ok 33 - POST /api/ai/agent/approve — duyệt thì ticket thực sự được tạo
+  ---
+  duration_ms: 739.235898
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent/approve → 400
+# [api] POST /api/ai/agent/approve → 404
+# Subtest: POST /api/ai/agent/approve — thiếu token trả 400, token bịa trả 404
+ok 34 - POST /api/ai/agent/approve — thiếu token trả 400, token bịa trả 404
+  ---
+  duration_ms: 174.438237
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent → 200
+# [api] GET /api/tickets → 200
+# [api] POST /api/ai/agent/approve → 200
+# [api] POST /api/ai/agent/approve → 404
+# [api] GET /api/tickets → 200
+# Subtest: POST /api/ai/agent/approve — approved=false từ chối và huỷ token
+ok 35 - POST /api/ai/agent/approve — approved=false từ chối và huỷ token
+  ---
+  duration_ms: 68.875176
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent → 200
+# [api] POST /api/ai/agent → 200
+# Subtest: agent: cùng session giữ lịch sử và ký ức giữa các lượt
+ok 36 - agent: cùng session giữ lịch sử và ký ức giữa các lượt
+  ---
+  duration_ms: 230.877866
+  type: 'test'
+  ...
+# [api] POST /api/ai/agent → 200
+# Subtest: agent: LTM được ghi xuống dataDir, không chỉ nằm trong RAM
+ok 37 - agent: LTM được ghi xuống dataDir, không chỉ nằm trong RAM
+  ---
+  duration_ms: 296.680397
+  type: 'test'
+  ...
+# (node:39356) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/ai-adversarial.test.js is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: ai-adversarial: prompt injection in ticket content is safely neutralized
+ok 38 - ai-adversarial: prompt injection in ticket content is safely neutralized
+  ---
+  duration_ms: 1.505803
+  type: 'test'
+  ...
+# Subtest: ai-adversarial: live gateway prompt injection test
+ok 39 - ai-adversarial: live gateway prompt injection test # SKIP LIVE_TESTS!=1, skipping live adversarial LLM test
+  ---
+  duration_ms: 0.270643
+  type: 'test'
+  ...
+# [api] GET /api/ai/status → 200
+# Subtest: GET /api/ai/status — Ollama không chạy → engine rule-based, không 500
+ok 40 - GET /api/ai/status — Ollama không chạy → engine rule-based, không 500
+  ---
+  duration_ms: 3890.830701
+  type: 'test'
+  ...
+# [api] GET /api/ai/status → 200
+# Subtest: GET /api/ai/status — Ollama chạy (fake) → engine ollama + list model
+ok 41 - GET /api/ai/status — Ollama chạy (fake) → engine ollama + list model
+  ---
+  duration_ms: 236.226279
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1007 HIGH • Máy không có Internet, ipconfig báo IP APIPA 169.254 • Nguyen Thi Mai (Accounting) • NETWORK • 2026-09-28 06:02:49
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1007 HIGH • Máy không có Internet, ipconfig báo IP... to=it-team@bmc.local
+# [api] POST /api/tickets → 201
+# [api] POST /api/ai/analyze → 200
+# Subtest: POST /api/ai/analyze {ticketId} — Ollama không chạy → fallback playbook theo keyword
+ok 42 - POST /api/ai/analyze {ticketId} — Ollama không chạy → fallback playbook theo keyword
+  ---
+  duration_ms: 704.597889
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 200
+# Subtest: POST /api/ai/analyze {title} — input tự do, không cần ticket trong DB
+ok 43 - POST /api/ai/analyze {title} — input tự do, không cần ticket trong DB
+  ---
+  duration_ms: 394.830686
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 400
+# Subtest: POST /api/ai/analyze — thiếu ticketId lẫn title → 400
+ok 44 - POST /api/ai/analyze — thiếu ticketId lẫn title → 400
+  ---
+  duration_ms: 256.085494
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 404
+# Subtest: POST /api/ai/analyze — ticketId không tồn tại → 404
+ok 45 - POST /api/ai/analyze — ticketId không tồn tại → 404
+  ---
+  duration_ms: 374.591144
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 200
+# Subtest: POST /api/ai/analyze — Ollama chạy (fake) → engine ollama, parse JSON analysis
+ok 46 - POST /api/ai/analyze — Ollama chạy (fake) → engine ollama, parse JSON analysis
+  ---
+  duration_ms: 401.542957
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 200
+# Subtest: POST /api/ai/analyze — model trả JSON bọc lẫn lộn → vẫn parse được
+ok 47 - POST /api/ai/analyze — model trả JSON bọc lẫn lộn → vẫn parse được
+  ---
+  duration_ms: 290.73997
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 200
+# Subtest: POST /api/ai/analyze — model trả JSON hỏng → fail-soft về rule-based, không 500
+ok 48 - POST /api/ai/analyze — model trả JSON hỏng → fail-soft về rule-based, không 500
+  ---
+  duration_ms: 302.994916
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 200
+# Subtest: POST /api/ai/analyze — có OPENAI_API_KEY (fake) → engine openai, không lộ key
+ok 49 - POST /api/ai/analyze — có OPENAI_API_KEY (fake) → engine openai, không lộ key
+  ---
+  duration_ms: 430.488628
+  type: 'test'
+  ...
+# [api] POST /api/ai/analyze → 200
+# Subtest: POST /api/ai/analyze — OpenAI 401 → rớt về rule-based, báo rõ lý do
+ok 50 - POST /api/ai/analyze — OpenAI 401 → rớt về rule-based, báo rõ lý do
+  ---
+  duration_ms: 321.982925
+  type: 'test'
+  ...
+# [api] GET /api/health → 200
+# Subtest: GET /api/health → 200, storage type + counts
+ok 51 - GET /api/health → 200, storage type + counts
+  ---
+  duration_ms: 2339.07954
+  type: 'test'
+  ...
+# [api] GET /api/dashboard/stats → 200
+# [api] GET /api/assets → 200
+# [api] GET /api/tickets → 200
+# Subtest: GET /api/dashboard/stats → KPI khớp dữ liệu thực tế
+ok 52 - GET /api/dashboard/stats → KPI khớp dữ liệu thực tế
+  ---
+  duration_ms: 17.059675
+  type: 'test'
+  ...
+# [api] GET /api/assets → 200
+# Subtest: GET /api/assets → mảng tài sản mẫu
+ok 53 - GET /api/assets → mảng tài sản mẫu
+  ---
+  duration_ms: 4.48423
+  type: 'test'
+  ...
+# [api] GET /api/assets?status=In%20Storage → 200
+# [api] GET /api/assets?q=ThinkPad → 200
+# [api] GET /api/assets?type=Printer → 200
+# Subtest: GET /api/assets?q / ?status / ?type → filter server-side
+ok 54 - GET /api/assets?q / ?status / ?type → filter server-side
+  ---
+  duration_ms: 39.038981
+  type: 'test'
+  ...
+# [api] POST /api/assets → 201
+# [api] POST /api/assets → 409
+# Subtest: POST /api/assets → 201, id tự sinh, status mặc định Active
+ok 55 - POST /api/assets → 201, id tự sinh, status mặc định Active
+  ---
+  duration_ms: 489.195259
+  type: 'test'
+  ...
+# [api] POST /api/assets → 400
+# [api] POST /api/assets → 422
+# Subtest: POST /api/assets thiếu trường → 400; status sai → 422
+ok 56 - POST /api/assets thiếu trường → 400; status sai → 422
+  ---
+  duration_ms: 76.451289
+  type: 'test'
+  ...
+# [api] GET /api/assets/1 → 200
+# [api] GET /api/assets/424242 → 404
+# Subtest: GET /api/assets/:id → 200 / 404
+ok 57 - GET /api/assets/:id → 200 / 404
+  ---
+  duration_ms: 22.443044
+  type: 'test'
+  ...
+# [api] PATCH /api/assets/6 → 200
+# [api] PATCH /api/assets/424242 → 404
+# [api] PATCH /api/assets/6 → 409
+# [api] PATCH /api/assets/6 → 422
+# Subtest: PATCH /api/assets/:id → 200; 404; 409 trùng tag; 422 status sai
+ok 58 - PATCH /api/assets/:id → 200; 404; 409 trùng tag; 422 status sai
+  ---
+  duration_ms: 268.326211
+  type: 'test'
+  ...
+# [api] POST /api/assets → 201
+# [assets] Xoá LP-QA-DEL (id 8)
+# [api] DELETE /api/assets/8 → 200
+# [api] DELETE /api/assets/8 → 404
+# Subtest: DELETE /api/assets/:id → 200, xoá lại → 404
+ok 59 - DELETE /api/assets/:id → 200, xoá lại → 404
+  ---
+  duration_ms: 415.698668
+  type: 'test'
+  ...
+# Subtest: request DTO: AssetInput/TicketInput/status/incident khai bao du field theo contract
+ok 60 - request DTO: AssetInput/TicketInput/status/incident khai bao du field theo contract
+  ---
+  duration_ms: 1.430979
+  type: 'test'
+  ...
+# Subtest: response DTO: moi resource group co schema trong components
+ok 61 - response DTO: moi resource group co schema trong components
+  ---
+  duration_ms: 0.185062
+  type: 'test'
+  ...
+# Subtest: response DTO: monitoring status/history va audit co schema, khong phai response trong
+ok 62 - response DTO: monitoring status/history va audit co schema, khong phai response trong
+  ---
+  duration_ms: 0.299305
+  type: 'test'
+  ...
+# Subtest: UI extractor quét duoc moi wrapper va it nhat 15 endpoint
+ok 63 - UI extractor quét duoc moi wrapper va it nhat 15 endpoint
+  ---
+  duration_ms: 1.077398
+  type: 'test'
+  ...
+# Subtest: mọi endpoint UI goi deu ton tai trong backend (ke ca dynamic :id va subresource)
+ok 64 - mọi endpoint UI goi deu ton tai trong backend (ke ca dynamic :id va subresource)
+  ---
+  duration_ms: 0.4816
+  type: 'test'
+  ...
+# Subtest: UI dynamic builder phai resolve dung item + status subresource
+ok 65 - UI dynamic builder phai resolve dung item + status subresource
+  ---
+  duration_ms: 0.411302
+  type: 'test'
+  ...
+# Subtest: operationId convention: collection GET dung list*, item GET dung get*
+ok 66 - operationId convention: collection GET dung list*, item GET dung get*
+  ---
+  duration_ms: 0.445903
+  type: 'test'
+  ...
+# Subtest: REQUIRED RESPONSE WIRING: moi success operation bat buoc $ref DUNG STATUS CODE
+ok 67 - REQUIRED RESPONSE WIRING: moi success operation bat buoc $ref DUNG STATUS CODE
+  ---
+  duration_ms: 0.190777
+  type: 'test'
+  ...
+# Subtest: REQUIRED RESPONSE WIRING: moi component bat buoc duoc it nhat mot operation tro toi
+ok 68 - REQUIRED RESPONSE WIRING: moi component bat buoc duoc it nhat mot operation tro toi
+  ---
+  duration_ms: 0.667445
+  type: 'test'
+  ...
+# Subtest: AssetInput phai mo ta duoc ca alias set va canonical set
+ok 69 - AssetInput phai mo ta duoc ca alias set va canonical set
+  ---
+  duration_ms: 1.745361
+  type: 'test'
+  ...
+# Subtest: AssetPatchInput phai document cac alias runtime chap nhan
+ok 70 - AssetPatchInput phai document cac alias runtime chap nhan
+  ---
+  duration_ms: 0.266424
+  type: 'test'
+  ...
+# Subtest: status update: default Resolved phai hop len voi required cua schema
+ok 71 - status update: default Resolved phai hop len voi required cua schema
+  ---
+  duration_ms: 0.590837
+  type: 'test'
+  ...
+# Subtest: runtime asset: mixed alias, canonical status, vlan va unknown key khop schema that
+ok 72 - runtime asset: mixed alias, canonical status, vlan va unknown key khop schema that
+  ---
+  duration_ms: 1446.773589
+  type: 'test'
+  ...
+# Subtest: runtime MiniERP incident bo qua unknown key nhu schema da chon
+ok 73 - runtime MiniERP incident bo qua unknown key nhu schema da chon
+  ---
+  duration_ms: 207.046381
+  type: 'test'
+  ...
+# Subtest: H-05: source registration khong co duplicate route signature
+ok 74 - H-05: source registration khong co duplicate route signature
+  ---
+  duration_ms: 302.598681
+  type: 'test'
+  ...
+# Subtest: H-05: /api/tickets/export.csv va /api/tickets/:id la hai signature khac nhau
+ok 75 - H-05: /api/tickets/export.csv va /api/tickets/:id la hai signature khac nhau
+  ---
+  duration_ms: 0.291148
+  type: 'test'
+  ...
+# Subtest: H-05: trailing slash duoc normalise de bat duplicate dang /x/ vs /x
+ok 76 - H-05: trailing slash duoc normalise de bat duplicate dang /x/ vs /x
+  ---
+  duration_ms: 4.208066
+  type: 'test'
+  ...
+# Subtest: contract: OpenAPI paths bang runtime/source route set (khong loai tru route nao)
+ok 77 - contract: OpenAPI paths bang runtime/source route set (khong loai tru route nao)
+  ---
+  duration_ms: 0.954185
+  type: 'test'
+  ...
+# Subtest: contract: moi operationId unique va khong rong
+ok 78 - contract: moi operationId unique va khong rong
+  ---
+  duration_ms: 0.351776
+  type: 'test'
+  ...
+# Subtest: contract: static UI endpoint literals deu thuoc backend set
+ok 79 - contract: static UI endpoint literals deu thuoc backend set
+  ---
+  duration_ms: 1.018364
+  type: 'test'
+  ...
+# [api] GET /api/assets/export.csv → 200
+# [api] GET /api/assets → 200
+# Subtest: GET /api/assets/export.csv → 200 text/csv + BOM + đúng số dòng
+ok 80 - GET /api/assets/export.csv → 200 text/csv + BOM + đúng số dòng
+  ---
+  duration_ms: 557.591844
+  type: 'test'
+  ...
+# [api] GET /api/assets/export.csv?status=In%20Storage → 200
+# Subtest: GET /api/assets/export.csv?status=In Storage → chỉ chứa dòng khớp filter
+ok 81 - GET /api/assets/export.csv?status=In Storage → chỉ chứa dòng khớp filter
+  ---
+  duration_ms: 148.13682
+  type: 'test'
+  ...
+# [api] POST /api/assets → 201
+# [api] GET /api/assets/export.csv?q=LP-QA-COMMA → 200
+# Subtest: CSV escape trường chứa dấu phẩy / nháy kép (serial, model có dấu phẩy)
+ok 82 - CSV escape trường chứa dấu phẩy / nháy kép (serial, model có dấu phẩy)
+  ---
+  duration_ms: 234.709109
+  type: 'test'
+  ...
+# [api] GET /api/tickets/export.csv → 200
+# Subtest: GET /api/tickets/export.csv → báo cáo ticket đủ cột nghiệp vụ
+ok 83 - GET /api/tickets/export.csv → báo cáo ticket đủ cột nghiệp vụ
+  ---
+  duration_ms: 7.906254
+  type: 'test'
+  ...
+# [api] GET /api/assets → 200
+# [api] GET /api/assets/export.csv → 200
+# [api] GET /api/assets → 200
+# Subtest: CSV export không làm thay đổi dữ liệu (read-only)
+ok 84 - CSV export không làm thay đổi dữ liệu (read-only)
+  ---
+  duration_ms: 88.895619
+  type: 'test'
+  ...
+# [api] GET /api/licenses → 200
+# Subtest: GET /api/licenses → 200, available = total - assigned
+ok 85 - GET /api/licenses → 200, available = total - assigned
+  ---
+  duration_ms: 541.881459
+  type: 'test'
+  ...
+# [api] GET /api/licenses/1 → 200
+# [api] GET /api/licenses/999 → 404
+# Subtest: GET /api/licenses/:id → 200 + utilizationPercent / 404
+ok 86 - GET /api/licenses/:id → 200 + utilizationPercent / 404
+  ---
+  duration_ms: 95.286578
+  type: 'test'
+  ...
+# [api] DELETE /api/licenses/1 → 405
+# [api] POST /api/assets/1 → 405
+# Subtest: Method không hỗ trợ → 405 + Allow header
+ok 87 - Method không hỗ trợ → 405 + Allow header
+  ---
+  duration_ms: 35.100165
+  type: 'test'
+  ...
+# [api] PUT /api/monitoring/checks → 405
+# [api] GET /api/monitoring/checks/1/run → 405
+# [api] POST /api/access-requests/1/handoff → 405
+# [api] PUT /api/changes → 405
+# Subtest: Factory routes trả 405 đúng Allow khi sai method
+ok 88 - Factory routes trả 405 đúng Allow khi sai method
+  ---
+  duration_ms: 162.584836
+  type: 'test'
+  ...
+# [api] GET /api/does-not-exist → 404
+# Subtest: Route lạ trong /api → 404 JSON kèm path
+ok 89 - Route lạ trong /api → 404 JSON kèm path
+  ---
+  duration_ms: 247.565602
+  type: 'test'
+  ...
+# [api] GET /api/health → 200
+# Subtest: Body JSON hỏng → 400, server không crash
+ok 90 - Body JSON hỏng → 400, server không crash
+  ---
+  duration_ms: 38.867817
+  type: 'test'
+  ...
+# Subtest: Static: GET / → HTML dashboard, GET /app.js → JS có nút export CSV
+ok 91 - Static: GET / → HTML dashboard, GET /app.js → JS có nút export CSV
+  ---
+  duration_ms: 9.996084
+  type: 'test'
+  ...
+# Subtest: Runbook và scenario docs được serve read-only từ portal
+ok 92 - Runbook và scenario docs được serve read-only từ portal
+  ---
+  duration_ms: 8.618436
+  type: 'test'
+  ...
+# [api] POST /api/assets → 201
+# [api] POST /api/tickets → 201
+# [api] GET /api/assets → 200
+# [api] GET /api/tickets → 200
+# [api] GET /api/dashboard/stats → 200
+# Subtest: Restart server trên cùng dataDir → Assets & Tickets mới vẫn còn
+ok 93 - Restart server trên cùng dataDir → Assets & Tickets mới vẫn còn
+  ---
+  duration_ms: 1483.22586
+  type: 'test'
+  ...
+# [api] GET /api/assets → 200
+# [api] POST /api/assets → 201
+# Subtest: id không bị cấp lại sau restart (đọc max id từ db.json)
+ok 94 - id không bị cấp lại sau restart (đọc max id từ db.json)
+  ---
+  duration_ms: 198.326047
+  type: 'test'
+  ...
+# [api] PATCH /api/tickets/1006/status → 200
+# [api] GET /api/tickets/1006 → 200
+# Subtest: Trạng thái ticket đã đổi vẫn nguyên sau restart
+ok 95 - Trạng thái ticket đã đổi vẫn nguyên sau restart
+  ---
+  duration_ms: 72.558702
+  type: 'test'
+  ...
+# [api] POST /api/assets → 201
+# Subtest: Ghi file là atomic: không còn file .tmp sót lại sau commit
+ok 96 - Ghi file là atomic: không còn file .tmp sót lại sau commit
+  ---
+  duration_ms: 176.154053
+  type: 'test'
+  ...
+# [api] GET /api/tickets → 200
+# [api] GET /api/tickets?status=Open → 200
+# [api] GET /api/tickets?priority=High → 200
+# [api] GET /api/tickets?q=DNS → 200
+# Subtest: GET /api/tickets + filter q / status / priority
+ok 97 - GET /api/tickets + filter q / status / priority
+  ---
+  duration_ms: 753.144432
+  type: 'test'
+  ...
+# [api] GET /api/tickets/1001 → 200
+# [api] GET /api/tickets/999999 → 404
+# Subtest: GET /api/tickets/:id → 200 / 404
+ok 98 - GET /api/tickets/:id → 200 / 404
+  ---
+  duration_ms: 31.719413
+  type: 'test'
+  ...
+# [api] POST /api/tickets → 201
+# Subtest: POST /api/tickets → 201, id >= 1001, status Open, createdAt "YYYY-MM-DD HH:mm"
+ok 99 - POST /api/tickets → 201, id >= 1001, status Open, createdAt "YYYY-MM-DD HH:mm"
+  ---
+  duration_ms: 293.890396
+  type: 'test'
+  ...
+# [api] POST /api/tickets → 201
+# Subtest: POST /api/tickets mặc định priority=Medium, category=General khi thiếu
+ok 100 - POST /api/tickets mặc định priority=Medium, category=General khi thiếu
+  ---
+  duration_ms: 60.465237
+  type: 'test'
+  ...
+# [api] POST /api/tickets → 400
+# [api] POST /api/tickets → 422
+# Subtest: POST /api/tickets thiếu title/requester → 400; priority sai → 422
+ok 101 - POST /api/tickets thiếu title/requester → 400; priority sai → 422
+  ---
+  duration_ms: 81.808119
+  type: 'test'
+  ...
+# [api] PATCH /api/tickets/1006/status → 200
+# [api] PATCH /api/tickets/424242/status → 404
+# [api] PATCH /api/tickets/1006/status → 422
+# Subtest: PATCH /api/tickets/:id/status → 200 + resolvedAt; 404; 422
+ok 102 - PATCH /api/tickets/:id/status → 200 + resolvedAt; 404; 422
+  ---
+  duration_ms: 84.682517
+  type: 'test'
+  ...
+# [api] PATCH /api/tickets/1006/status → 200
+# Subtest: PATCH /api/tickets/:id/status = In Progress → 200, xoá resolvedAt
+ok 103 - PATCH /api/tickets/:id/status = In Progress → 200, xoá resolvedAt
+  ---
+  duration_ms: 63.393044
+  type: 'test'
+  ...
+# [api] GET /api/notifications → 200
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1009 HIGH • Firewall treo - toàn công ty mất mạng • QA Bot (IT Support) • NETWORK • 2026-09-28 06:02:59
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1009 HIGH • Firewall treo - toàn công ty mất mạng ... to=it-team@bmc.local
+# [api] POST /api/tickets → 201
+# [api] GET /api/notifications → 200
+# Subtest: POST /api/tickets mức High → phát sinh webhook alert (mock Telegram/Email)
+ok 104 - POST /api/tickets mức High → phát sinh webhook alert (mock Telegram/Email)
+  ---
+  duration_ms: 90.7016
+  type: 'test'
+  ...
+# [api] POST /api/tickets → 201
+# [api] GET /api/notifications → 200
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1011 CRITICAL • Ransomware lây lan • QA (Security) • General • 2026-09-28 06:02:59
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1011 CRITICAL • Ransomware lây lan • QA (Security)... to=it-team@bmc.local
+# [api] POST /api/tickets → 201
+# [api] GET /api/notifications → 200
+# Subtest: POST /api/tickets mức Critical → alert; mức Low → không alert
+ok 105 - POST /api/tickets mức Critical → alert; mức Low → không alert
+  ---
+  duration_ms: 140.347225
+  type: 'test'
+  ...
+# [api] GET /api/notifications?limit=1 → 200
+# Subtest: GET /api/notifications?limit=1 → tôn trọng limit, giữ tổng count
+ok 106 - GET /api/notifications?limit=1 → tôn trọng limit, giữ tổng count
+  ---
+  duration_ms: 2.595486
+  type: 'test'
+  ...
+# Subtest: anonymous request toi protected GET tra 401 (khong handler nao chay truoc auth)
+ok 107 - anonymous request toi protected GET tra 401 (khong handler nao chay truoc auth)
+  ---
+  duration_ms: 758.485955
+  type: 'test'
+  ...
+# Subtest: public probes: health 200, bad login 401, MiniERP incident thieu key 401
+ok 108 - public probes: health 200, bad login 401, MiniERP incident thieu key 401
+  ---
+  duration_ms: 296.90741
+  type: 'test'
+  ...
+# Subtest: VIEWER doc read endpoint duoc phep (200) nhung bi chan /api/audit (403)
+ok 109 - VIEWER doc read endpoint duoc phep (200) nhung bi chan /api/audit (403)
+  ---
+  duration_ms: 1198.108685
+  type: 'test'
+  ...
+# Subtest: VIEWER mutation bi 403; admin mutation khong con 401/403
+ok 110 - VIEWER mutation bi 403; admin mutation khong con 401/403
+  ---
+  duration_ms: 331.029466
+  type: 'test'
+  ...
+# Subtest: csv: xuống dòng đúng chuẩn RFC-4180 (CRLF + BOM cho Excel UTF-8)
+ok 111 - csv: xuống dòng đúng chuẩn RFC-4180 (CRLF + BOM cho Excel UTF-8)
+  ---
+  duration_ms: 1.596844
+  type: 'test'
+  ...
+# Subtest: csv: escape dấu phẩy, nháy kép và xuống dòng trong ô
+ok 112 - csv: escape dấu phẩy, nháy kép và xuống dòng trong ô
+  ---
+  duration_ms: 0.3484
+  type: 'test'
+  ...
+# Subtest: csv: giá trị null/undefined -> chuỗi rỗng, number/boolean thành text
+ok 113 - csv: giá trị null/undefined -> chuỗi rỗng, number/boolean thành text
+  ---
+  duration_ms: 0.20829
+  type: 'test'
+  ...
+# Subtest: csv: dataset rỗng vẫn trả header (file kiểm kê không bị trống hoàn toàn)
+ok 114 - csv: dataset rỗng vẫn trả header (file kiểm kê không bị trống hoàn toàn)
+  ---
+  duration_ms: 1.928347
+  type: 'test'
+  ...
+# Subtest: csv: cột là function -> suy ra giá trị (computed column)
+ok 115 - csv: cột là function -> suy ra giá trị (computed column)
+  ---
+  duration_ms: 0.26898
+  type: 'test'
+  ...
+# Subtest: csv: auditFilename định dạng IT-Asset-Audit_YYYYMMDD_HHmm.csv
+ok 116 - csv: auditFilename định dạng IT-Asset-Audit_YYYYMMDD_HHmm.csv
+  ---
+  duration_ms: 1.380824
+  type: 'test'
+  ...
+# Subtest: notify: chỉ alert ticket High/Critical
+ok 117 - notify: chỉ alert ticket High/Critical
+  ---
+  duration_ms: 39.085887
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1006 HIGH • Printer on fire • A (Admin) • General • 2026-09-28 06:02:58
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1006 HIGH • Printer on fire • A (Admin) • General ... to=it-team@bmc.local
+# Subtest: notify: alert ghi log file + history có payload mô phỏng Telegram/Email
+ok 118 - notify: alert ghi log file + history có payload mô phỏng Telegram/Email
+  ---
+  duration_ms: 12.133133
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1 CRITICAL • x • Unknown (N/A) • General • 2026-09-28 06:02:58
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1 CRITICAL • x • Unknown (N/A) • General • 2026-09... to=it-team@bmc.local
+# Subtest: notify: webhook URL lỗi không được làm sập request (deliver=false + lý do)
+ok 119 - notify: webhook URL lỗi không được làm sập request (deliver=false + lý do)
+  ---
+  duration_ms: 180.311891
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#11 HIGH • first • Unknown (N/A) • General • 2026-09-28 06:02:58
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#11 HIGH • first • Unknown (N/A) • General • 2026-0... to=it-team@bmc.local
+# [notify:telegram] [ALERT][IT-HELPDESK] \#22 CRITICAL • second • Unknown (N/A) • General • 2026-09-28 06:02:58
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#22 CRITICAL • second • Unknown (N/A) • General • 2... to=it-team@bmc.local
+# [notify:telegram] [ALERT][IT-HELPDESK] \#33 HIGH • third • Unknown (N/A) • General • 2026-09-28 06:02:58
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#33 HIGH • third • Unknown (N/A) • General • 2026-0... to=it-team@bmc.local
+# Subtest: notify: history trả mới nhất trước và tôn trọng limit
+ok 120 - notify: history trả mới nhất trước và tôn trọng limit
+  ---
+  duration_ms: 26.385125
+  type: 'test'
+  ...
+# Subtest: priority/SLA helpers and legacy migration are deterministic
+ok 121 - priority/SLA helpers and legacy migration are deterministic
+  ---
+  duration_ms: 251.949319
+  type: 'test'
+  ...
+# Subtest: backup validates and restores to a separate target
+ok 122 - backup validates and restores to a separate target
+  ---
+  duration_ms: 44.29286
+  type: 'test'
+  ...
+# Subtest: lab RBAC denies anonymous/L1 admin mutations and allows auditor reads
+ok 123 - lab RBAC denies anonymous/L1 admin mutations and allows auditor reads
+  ---
+  duration_ms: 1155.105065
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1007 CRITICAL • ERP down • Line (General) • General • 2026-09-28 06:03:01
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1007 CRITICAL • ERP down • Line (General) • Genera... to=it-team@bmc.local
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1009 CRITICAL • ERP failed • MiniERP (ERP Operations) • ERP • 2026-09-28 06:03:02
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1009 CRITICAL • ERP failed • MiniERP (ERP Operatio... to=it-team@bmc.local
+# Subtest: ticket timeline/SLA, monitoring dedupe, and MiniERP idempotency work
+ok 124 - ticket timeline/SLA, monitoring dedupe, and MiniERP idempotency work
+  ---
+  duration_ms: 989.261375
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1007 CRITICAL • Long reference • MiniERP (ERP Operations) • ERP • 2026-09-28 06:03:02
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1007 CRITICAL • Long reference • MiniERP (ERP Oper... to=it-team@bmc.local
+# Subtest: a long MiniERP external reference replays as one incident (accepted cap == stored cap)
+ok 125 - a long MiniERP external reference replays as one incident (accepted cap == stored cap)
+  ---
+  duration_ms: 135.952927
+  type: 'test'
+  ...
+# [api] POST /api/problems → 201
+# [api] GET /api/dashboard/stats → 200
+# [api] POST /api/tickets → 201
+# [api] POST /api/tickets → 201
+# [api] POST /api/problems/1/link-ticket → 200
+# [api] POST /api/problems/1/link-ticket → 200
+# [api] GET /api/problems/1 → 200
+# [api] POST /api/changes → 422
+# [api] POST /api/changes → 201
+# [api] POST /api/access-requests → 201
+# [api] POST /api/access-requests/1/approve → 200
+# [api] GET /api/access-requests/1/handoff → 200
+# [api] POST /api/access-requests → 201
+# [api] POST /api/access-requests/2/offboard → 200
+# [api] POST /api/access-requests/2/offboard → 200
+# Subtest: problem/change and access handoff/offboarding workflows are idempotent
+ok 126 - problem/change and access handoff/offboarding workflows are idempotent
+  ---
+  duration_ms: 911.183391
+  type: 'test'
+  ...
+# Subtest: operations/runbooks tabs expose their DOM and client loaders
+ok 127 - operations/runbooks tabs expose their DOM and client loaders
+  ---
+  duration_ms: 4.034488
+  type: 'test'
+  ...
+# Subtest: OpenAPI exposes authentication, ITSM, monitoring, MiniERP and audit contracts
+ok 128 - OpenAPI exposes authentication, ITSM, monitoring, MiniERP and audit contracts
+  ---
+  duration_ms: 0.588845
+  type: 'test'
+  ...
+# Subtest: factory delivery has the required runbooks and twelve reproducible scenarios
+ok 129 - factory delivery has the required runbooks and twelve reproducible scenarios
+  ---
+  duration_ms: 8.564304
+  type: 'test'
+  ...
+# Subtest: Docker image includes the factory runbooks and scenario documents
+ok 130 - Docker image includes the factory runbooks and scenario documents
+  ---
+  duration_ms: 0.233619
+  type: 'test'
+  ...
+# Subtest: operations PowerShell scripts contain safety and evidence controls
+ok 131 - operations PowerShell scripts contain safety and evidence controls
+  ---
+  duration_ms: 2.088131
+  type: 'test'
+  ...
+# Subtest: live: app factory /api/health is ok (ephemeral port)
+ok 132 - live: app factory /api/health is ok (ephemeral port)
+  ---
+  duration_ms: 1250.502531
+  type: 'test'
+  ...
+# SKIP closed-port-probe: http://127.0.0.1:1/nope unreachable (connect ECONNREFUSED 127.0.0.1:1)
+# Subtest: live: probe of a closed port returns false and skips (no throw)
+ok 133 - live: probe of a closed port returns false and skips (no throw)
+  ---
+  duration_ms: 4.343242
+  type: 'test'
+  ...
+# Subtest: seeded ticket fixtures all have unique ids
+ok 134 - seeded ticket fixtures all have unique ids
+  ---
+  duration_ms: 0.674797
+  type: 'test'
+  ...
+# Subtest: GET /metrics → 200 text/plain, khong yeu cau auth
+ok 135 - GET /metrics → 200 text/plain, khong yeu cau auth
+  ---
+  duration_ms: 386.005612
+  type: 'test'
+  ...
+# Subtest: GET /metrics khong chua PII hay ticket bodies
+ok 136 - GET /metrics khong chua PII hay ticket bodies
+  ---
+  duration_ms: 72.019672
+  type: 'test'
+  ...
+# Subtest: GET /metrics dem request theo route×status (http_requests_total)
+ok 137 - GET /metrics dem request theo route×status (http_requests_total)
+  ---
+  duration_ms: 114.081445
+  type: 'test'
+  ...
+# Subtest: route la trong /api van 404 JSON (fail-closed giu nguyen)
+ok 138 - route la trong /api van 404 JSON (fail-closed giu nguyen)
+  ---
+  duration_ms: 8.389774
+  type: 'test'
+  ...
+# Subtest: notifier chi thay ticket da durable tren dia khi alert (ticket, monitoring, MiniERP)
+ok 139 - notifier chi thay ticket da durable tren dia khi alert (ticket, monitoring, MiniERP)
+  ---
+  duration_ms: 1019.736512
+  type: 'test'
+  ...
+# Subtest: notifier treo: signal+deadline duoc cap, request bounded va alerted=false
+ok 140 - notifier treo: signal+deadline duoc cap, request bounded va alerted=false
+  ---
+  duration_ms: 255.975949
+  type: 'test'
+  ...
+# Subtest: notifier treo: monitoring va MiniERP van tra ket qua nhanh va durable
+ok 141 - notifier treo: monitoring va MiniERP van tra ket qua nhanh va durable
+  ---
+  duration_ms: 429.034129
+  type: 'test'
+  ...
+# [error] Error: disk full (simulated)
+#     at store.commit (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/notifier-ordering.test.js:173:38)
+#     at save (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:95:28)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:100:13
+#     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#     at async /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:175:19
+# Subtest: commit that: notifier KHONG duoc goi (call count = 0) va client khong nhan success
+ok 142 - commit that: notifier KHONG duoc goi (call count = 0) va client khong nhan success
+  ---
+  duration_ms: 125.441377
+  type: 'test'
+  ...
+# Subtest: safeNotify abort notifier chay refed handle va xoa handle khi timeout
+ok 143 - safeNotify abort notifier chay refed handle va xoa handle khi timeout
+  ---
+  duration_ms: 215.169794
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#9001 HIGH • abort webhook • P (N/A) • General • 2026-09-28 06:03:04
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#9001 HIGH • abort webhook • P (N/A) • General • 20... to=it-team@bmc.local
+# Subtest: notifier bo qua signal: response van alerted=false va khong kha dinh alert da gui
+ok 144 - notifier bo qua signal: response van alerted=false va khong kha dinh alert da gui
+  ---
+  duration_ms: 444.514509
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#9100 HIGH • abort during log io • P (N/A) • General • 2026-09-28 06:03:04
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#9100 HIGH • abort during log io • P (N/A) • Genera... to=it-team@bmc.local
+# Subtest: default notifier truyền signal xuống fetch, abort socket và tra alerted=false
+ok 145 - default notifier truyền signal xuống fetch, abort socket và tra alerted=false
+  ---
+  duration_ms: 85.55121
+  type: 'test'
+  ...
+# Subtest: notifier bi abort trong luc ghi notifications.log: webhook khong duoc goi
+ok 146 - notifier bi abort trong luc ghi notifications.log: webhook khong duoc goi
+  ---
+  duration_ms: 3.846316
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets van 201 va commit du khong notifier alert() throw synchronous
+ok 147 - POST /api/tickets van 201 va commit du khong notifier alert() throw synchronous
+  ---
+  duration_ms: 705.434041
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets van 201 va commit du khong notifier alert() tra ve object dong bo
+ok 148 - POST /api/tickets van 201 va commit du khong notifier alert() tra ve object dong bo
+  ---
+  duration_ms: 396.822429
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets van 201 va commit du khong notifier alert() tra ve chuoi (khong phai Promise)
+ok 149 - POST /api/tickets van 201 va commit du khong notifier alert() tra ve chuoi (khong phai Promise)
+  ---
+  duration_ms: 149.342434
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets van 201 va commit du khong notifier alert() tra ve null
+ok 150 - POST /api/tickets van 201 va commit du khong notifier alert() tra ve null
+  ---
+  duration_ms: 155.239724
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets van 201 va commit du khong notifier alert() reject bat dong bo
+ok 151 - POST /api/tickets van 201 va commit du khong notifier alert() reject bat dong bo
+  ---
+  duration_ms: 205.386566
+  type: 'test'
+  ...
+# Subtest: notifier that bai khong lam monitoring incident gay partial state
+ok 152 - notifier that bai khong lam monitoring incident gay partial state
+  ---
+  duration_ms: 281.816364
+  type: 'test'
+  ...
+# Subtest: notifier that bai khong lam MiniERP intake partial state
+ok 153 - notifier that bai khong lam MiniERP intake partial state
+  ---
+  duration_ms: 125.321479
+  type: 'test'
+  ...
+# Subtest: SLA read khong 500 khi notifier alert throw dong bo
+ok 154 - SLA read khong 500 khi notifier alert throw dong bo
+  ---
+  duration_ms: 123.227761
+  type: 'test'
+  ...
+# Subtest: openapi.yaml parse duoc bang YAML that (khong syntax error)
+ok 155 - openapi.yaml parse duoc bang YAML that (khong syntax error)
+  ---
+  duration_ms: 643.007296
+  type: 'test'
+  ...
+# Subtest: openapi.yaml khong co duplicate mapping key (AuditEvent truoc day bi declare 2 lan)
+ok 156 - openapi.yaml khong co duplicate mapping key (AuditEvent truoc day bi declare 2 lan)
+  ---
+  duration_ms: 515.333566
+  type: 'test'
+  ...
+# Subtest: moi component schema resolve duoc $ref va gia tri co kieu dung
+ok 157 - moi component schema resolve duoc $ref va gia tri co kieu dung
+  ---
+  duration_ms: 121.788033
+  type: 'test'
+  ...
+# Subtest: AssetInput anyOf phai phu tat ca to hop alias doc lap doc, khong dung oneOf
+ok 158 - AssetInput anyOf phai phu tat ca to hop alias doc lap doc, khong dung oneOf
+  ---
+  duration_ms: 274.451301
+  type: 'test'
+  ...
+# Subtest: Asset/AssetInput/AssetPatchInput status deu tro toi canonical lifecycle enum
+ok 159 - Asset/AssetInput/AssetPatchInput status deu tro toi canonical lifecycle enum
+  ---
+  duration_ms: 170.490144
+  type: 'test'
+  ...
+# Subtest: response $ref doc lap theo TUNG status code (200/201 phai doc lap)
+ok 160 - response $ref doc lap theo TUNG status code (200/201 phai doc lap)
+  ---
+  duration_ms: 201.050091
+  type: 'test'
+  ...
+# Subtest: AssetPatchInput mo ta vlan, minProperties=1 va van cho phep unknown key ben canh field da biet
+ok 161 - AssetPatchInput mo ta vlan, minProperties=1 va van cho phep unknown key ben canh field da biet
+  ---
+  duration_ms: 387.891248
+  type: 'test'
+  ...
+# Subtest: AssetPatchInput anyOf phai phu dung field runtime chap nhan, khong thua khong thieu
+ok 162 - AssetPatchInput anyOf phai phu dung field runtime chap nhan, khong thua khong thieu
+  ---
+  duration_ms: 206.151052
+  type: 'test'
+  ...
+# Subtest: AssetPatchInput: unknown-only PATCH bi ca schema va runtime tu choi giong nhau
+ok 163 - AssetPatchInput: unknown-only PATCH bi ca schema va runtime tu choi giong nhau
+  ---
+  duration_ms: 1896.506389
+  type: 'test'
+  ...
+# [notify:telegram] [ALERT][IT-HELPDESK] \#1007 HIGH • Matrix filter probe • Probe (General) • General • 2026-09-28 06:03:06
+# [notify:email]    subject=[ALERT][IT-HELPDESK] \#1007 HIGH • Matrix filter probe • Probe (General) ... to=it-team@bmc.local
+# Subtest: GET /api/tickets giu legacy filter status/priority/q
+ok 164 - GET /api/tickets giu legacy filter status/priority/q
+  ---
+  duration_ms: 943.60656
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets giu validation 400/422 va default Medium/General
+ok 165 - POST /api/tickets giu validation 400/422 va default Medium/General
+  ---
+  duration_ms: 255.087703
+  type: 'test'
+  ...
+# Subtest: GET /api/tickets/:id tra 200 co ticket va 404 khi thieu
+ok 166 - GET /api/tickets/:id tra 200 co ticket va 404 khi thieu
+  ---
+  duration_ms: 138.664102
+  type: 'test'
+  ...
+# Subtest: PATCH status: Open -> In Progress qua HTTP, state/status/resolvedAt coherent
+ok 167 - PATCH status: Open -> In Progress qua HTTP, state/status/resolvedAt coherent
+  ---
+  duration_ms: 243.545509
+  type: 'test'
+  ...
+# Subtest: PATCH status: Closed -> In Progress (Mo lai ticket Closed) qua HTTP
+ok 168 - PATCH status: Closed -> In Progress (Mo lai ticket Closed) qua HTTP
+  ---
+  duration_ms: 451.616646
+  type: 'test'
+  ...
+# Subtest: PATCH status: Resolved -> In Progress giu timeline va audit coherent
+ok 169 - PATCH status: Resolved -> In Progress giu timeline va audit coherent
+  ---
+  duration_ms: 246.36029
+  type: 'test'
+  ...
+# Subtest: PATCH status: 404 ticket thieu, 422 trang thai khong hop le
+ok 170 - PATCH status: 404 ticket thieu, 422 trang thai khong hop le
+  ---
+  duration_ms: 109.462069
+  type: 'test'
+  ...
+# Subtest: GET /api/assets giu legacy filter va tra array
+ok 171 - GET /api/assets giu legacy filter va tra array
+  ---
+  duration_ms: 132.845883
+  type: 'test'
+  ...
+# Subtest: POST /api/assets giu 400 thieu truong va 409 trung tag/serial
+ok 172 - POST /api/assets giu 400 thieu truong va 409 trung tag/serial
+  ---
+  duration_ms: 113.497713
+  type: 'test'
+  ...
+# Subtest: PATCH /api/assets/:id giu 404, 409, 422 va 400 khi payload rong
+ok 173 - PATCH /api/assets/:id giu 404, 409, 422 va 400 khi payload rong
+  ---
+  duration_ms: 227.873904
+  type: 'test'
+  ...
+# Subtest: PATCH /api/assets/:id payload rong tra 400, khong audit va khong mutate
+ok 174 - PATCH /api/assets/:id payload rong tra 400, khong audit va khong mutate
+  ---
+  duration_ms: 125.180006
+  type: 'test'
+  ...
+# Subtest: PATCH status: Resolved -> Open xoa resolvedAt, giu state NEW/status Open
+ok 175 - PATCH status: Resolved -> Open xoa resolvedAt, giu state NEW/status Open
+  ---
+  duration_ms: 259.895863
+  type: 'test'
+  ...
+# Subtest: PATCH status: Closed -> Open xoa resolution + closedAt
+ok 176 - PATCH status: Closed -> Open xoa resolution + closedAt
+  ---
+  duration_ms: 604.766502
+  type: 'test'
+  ...
+# Subtest: PATCH status: reopen to Open ghi timeline from/to/note va audit actor
+ok 177 - PATCH status: reopen to Open ghi timeline from/to/note va audit actor
+  ---
+  duration_ms: 415.543946
+  type: 'test'
+  ...
+# Subtest: test-api.sh: MANAGEMENT phai lay tu env, khong hard-code
+ok 178 - test-api.sh: MANAGEMENT phai lay tu env, khong hard-code
+  ---
+  duration_ms: 2.51275
+  type: 'test'
+  ...
+# Subtest: test-api.sh: chi duoc kill dung PID do chinh script tao (khong pkill theo ten)
+ok 179 - test-api.sh: chi duoc kill dung PID do chinh script tao (khong pkill theo ten)
+  ---
+  duration_ms: 0.586198
+  type: 'test'
+  ...
+# Subtest: test-api.sh: trap INT/TERM phai thoat de EXIT cleanup thuc su chay
+ok 180 - test-api.sh: trap INT/TERM phai thoat de EXIT cleanup thuc su chay
+  ---
+  duration_ms: 0.372136
+  type: 'test'
+  ...
+# Subtest: test-api.sh: RUN_DIR tam nam ngoai repo va DATA_DIR la thu muc con cua no
+ok 181 - test-api.sh: RUN_DIR tam nam ngoai repo va DATA_DIR la thu muc con cua no
+  ---
+  duration_ms: 0.306537
+  type: 'test'
+  ...
+# Subtest: test-api.sh: che do BASE_URL khong duoc mac dinh DATA_DIR ve data that cua repo
+ok 182 - test-api.sh: che do BASE_URL khong duoc mac dinh DATA_DIR ve data that cua repo
+  ---
+  duration_ms: 0.298262
+  type: 'test'
+  ...
+# Subtest: test-api.sh: port lay tu env hoac do OS cap, khong danh sach port du phong (tinh)
+ok 183 - test-api.sh: port lay tu env hoac do OS cap, khong danh sach port du phong (tinh)
+  ---
+  duration_ms: 0.67313
+  type: 'test'
+  ...
+# Subtest: test-api.sh: pick_free_port() thuc su tra ve mot port trong (can bash)
+ok 184 - test-api.sh: pick_free_port() thuc su tra ve mot port trong (can bash)
+  ---
+  duration_ms: 184.899942
+  type: 'test'
+  ...
+# Subtest: test-api.sh: QA_LOG_DIR nhan log server + CSV + summary TRUOC khi xoa RUN_DIR
+ok 185 - test-api.sh: QA_LOG_DIR nhan log server + CSV + summary TRUOC khi xoa RUN_DIR
+  ---
+  duration_ms: 1.913289
+  type: 'test'
+  ...
+# Subtest: test-api.sh: van in bang PASS/FAIL + exit code chuan (tinh)
+ok 186 - test-api.sh: van in bang PASS/FAIL + exit code chuan (tinh)
+  ---
+  duration_ms: 0.493567
+  type: 'test'
+  ...
+# Subtest: test-api.sh: bash -n parse duoc script (can bash)
+ok 187 - test-api.sh: bash -n parse duoc script (can bash)
+  ---
+  duration_ms: 53.996777
+  type: 'test'
+  ...
+# Subtest: test-api.sh: cleanup phai fail-safe — stop_server TRUOC, write_summary || true, xoa RUN_DIR sau cung
+ok 188 - test-api.sh: cleanup phai fail-safe — stop_server TRUOC, write_summary || true, xoa RUN_DIR sau cung
+  ---
+  duration_ms: 3.70814
+  type: 'test'
+  ...
+# Subtest: test-api.sh: failure path — server khong bao gio healthy thi khong con gi sot lai
+ok 189 - test-api.sh: failure path — server khong bao gio healthy thi khong con gi sot lai
+  ---
+  duration_ms: 14370.614091
+  type: 'test'
+  ...
+# Subtest: UI e2e: script + journey test ton tai trong repo (guard khi chay ngoai container)
+ok 190 - UI e2e: script + journey test ton tai trong repo (guard khi chay ngoai container)
+  ---
+  duration_ms: 1.648852
+  type: 'test'
+  ...
+# Subtest: UI e2e: journey Playwright chi chup screenshot trong QA_ROOT va chan network ngoai
+ok 191 - UI e2e: journey Playwright chi chup screenshot trong QA_ROOT va chan network ngoai
+  ---
+  duration_ms: 1.314287
+  type: 'test'
+  ...
+# Subtest: các script PowerShell đều tồn tại
+ok 192 - các script PowerShell đều tồn tại
+  ---
+  duration_ms: 2.803688
+  type: 'test'
+  ...
+# Subtest: scripts/New-CompanyUser.ps1 — 0 lỗi cú pháp tĩnh
+ok 193 - scripts/New-CompanyUser.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 22.494917
+  type: 'test'
+  ...
+# Subtest: scripts/Export-ITAssetAudit.ps1 — 0 lỗi cú pháp tĩnh
+ok 194 - scripts/Export-ITAssetAudit.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 3.248518
+  type: 'test'
+  ...
+# Subtest: scripts/Test-NetworkHealth.ps1 — 0 lỗi cú pháp tĩnh
+ok 195 - scripts/Test-NetworkHealth.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 5.341278
+  type: 'test'
+  ...
+# Subtest: scripts/Disable-CompanyUser.ps1 — 0 lỗi cú pháp tĩnh
+ok 196 - scripts/Disable-CompanyUser.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 5.836792
+  type: 'test'
+  ...
+# Subtest: scripts/Backup-HelpdeskData.ps1 — 0 lỗi cú pháp tĩnh
+ok 197 - scripts/Backup-HelpdeskData.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 5.327308
+  type: 'test'
+  ...
+# Subtest: scripts/Restore-HelpdeskData.ps1 — 0 lỗi cú pháp tĩnh
+ok 198 - scripts/Restore-HelpdeskData.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 2.945061
+  type: 'test'
+  ...
+# Subtest: scripts/Backup-ADConfiguration.ps1 — 0 lỗi cú pháp tĩnh
+ok 199 - scripts/Backup-ADConfiguration.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 3.075047
+  type: 'test'
+  ...
+# Subtest: scripts/Test-PrintScanHealth.ps1 — 0 lỗi cú pháp tĩnh
+ok 200 - scripts/Test-PrintScanHealth.ps1 — 0 lỗi cú pháp tĩnh
+  ---
+  duration_ms: 4.589437
+  type: 'test'
+  ...
+# Subtest: New-CompanyUser.ps1 dùng ${username}: đúng chuẩn (regression lỗi từng có)
+ok 201 - New-CompanyUser.ps1 dùng ${username}: đúng chuẩn (regression lỗi từng có)
+  ---
+  duration_ms: 0.691242
+  type: 'test'
+  ...
+# Subtest: mutation: chuỗi kép chưa đóng → linter PHẢI báo lỗi
+ok 202 - mutation: chuỗi kép chưa đóng → linter PHẢI báo lỗi
+  ---
+  duration_ms: 1.290067
+  type: 'test'
+  ...
+# Subtest: mutation: ngoặc nhọn lệch → linter PHẢI báo lỗi
+ok 203 - mutation: ngoặc nhọn lệch → linter PHẢI báo lỗi
+  ---
+  duration_ms: 1.303209
+  type: 'test'
+  ...
+# Subtest: mutation: $var: không bọc {} → linter PHẢI báo đúng rule var-colon
+ok 204 - mutation: $var: không bọc {} → linter PHẢI báo đúng rule var-colon
+  ---
+  duration_ms: 1.667259
+  type: 'test'
+  ...
+# Subtest: mutation: cmdlet gõ nhầm Get-CimInstanse → linter PHẢI gợi ý cmdlet đúng
+ok 205 - mutation: cmdlet gõ nhầm Get-CimInstanse → linter PHẢI gợi ý cmdlet đúng
+  ---
+  duration_ms: 2.12123
+  type: 'test'
+  ...
+# Subtest: mutation: smart quote trong code → linter PHẢI báo lỗi
+ok 206 - mutation: smart quote trong code → linter PHẢI báo lỗi
+  ---
+  duration_ms: 1.008942
+  type: 'test'
+  ...
+# Subtest: đo lường độ chính xác: bản gốc SẠCH nhưng mỗi bản mutate đều có lỗi
+ok 207 - đo lường độ chính xác: bản gốc SẠCH nhưng mỗi bản mutate đều có lỗi
+  ---
+  duration_ms: 8.360765
+  type: 'test'
+  ...
+# Subtest: danh sách route trích được từ src/app.js (không rỗng)
+ok 208 - danh sách route trích được từ src/app.js (không rỗng)
+  ---
+  duration_ms: 3.805787
+  type: 'test'
+  ...
+# Subtest: route inventory fail-closed: khong registration nao bi scanner bo qua
+ok 209 - route inventory fail-closed: khong registration nao bi scanner bo qua
+  ---
+  duration_ms: 133.219728
+  type: 'test'
+  ...
+# Subtest: source registration khong dang ky trung route signature (raw, khong dedupe truoc)
+ok 210 - source registration khong dang ky trung route signature (raw, khong dedupe truoc)
+  ---
+  duration_ms: 58.801489
+  type: 'test'
+  ...
+# Subtest: route DELETE /api/assets/:id được kiểm trong test suite
+ok 211 - route DELETE /api/assets/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.287633
+  type: 'test'
+  ...
+# Subtest: route GET /api/access-requests được kiểm trong test suite
+ok 212 - route GET /api/access-requests được kiểm trong test suite
+  ---
+  duration_ms: 0.181138
+  type: 'test'
+  ...
+# Subtest: route GET /api/access-requests/:id được kiểm trong test suite
+ok 213 - route GET /api/access-requests/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.336995
+  type: 'test'
+  ...
+# Subtest: route GET /api/access-requests/:id/handoff được kiểm trong test suite
+ok 214 - route GET /api/access-requests/:id/handoff được kiểm trong test suite
+  ---
+  duration_ms: 0.243502
+  type: 'test'
+  ...
+# Subtest: route GET /api/ai/agent/status được kiểm trong test suite
+ok 215 - route GET /api/ai/agent/status được kiểm trong test suite
+  ---
+  duration_ms: 0.104354
+  type: 'test'
+  ...
+# Subtest: route GET /api/ai/status được kiểm trong test suite
+ok 216 - route GET /api/ai/status được kiểm trong test suite
+  ---
+  duration_ms: 0.339535
+  type: 'test'
+  ...
+# Subtest: route GET /api/assets được kiểm trong test suite
+ok 217 - route GET /api/assets được kiểm trong test suite
+  ---
+  duration_ms: 0.424707
+  type: 'test'
+  ...
+# Subtest: route GET /api/assets/:id được kiểm trong test suite
+ok 218 - route GET /api/assets/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.312186
+  type: 'test'
+  ...
+# Subtest: route GET /api/assets/export.csv được kiểm trong test suite
+ok 219 - route GET /api/assets/export.csv được kiểm trong test suite
+  ---
+  duration_ms: 0.133718
+  type: 'test'
+  ...
+# Subtest: route GET /api/audit được kiểm trong test suite
+ok 220 - route GET /api/audit được kiểm trong test suite
+  ---
+  duration_ms: 0.129807
+  type: 'test'
+  ...
+# Subtest: route GET /api/auth/me được kiểm trong test suite
+ok 221 - route GET /api/auth/me được kiểm trong test suite
+  ---
+  duration_ms: 0.11518
+  type: 'test'
+  ...
+# Subtest: route GET /api/changes được kiểm trong test suite
+ok 222 - route GET /api/changes được kiểm trong test suite
+  ---
+  duration_ms: 0.095673
+  type: 'test'
+  ...
+# Subtest: route GET /api/changes/:id được kiểm trong test suite
+ok 223 - route GET /api/changes/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.382093
+  type: 'test'
+  ...
+# Subtest: route GET /api/dashboard/stats được kiểm trong test suite
+ok 224 - route GET /api/dashboard/stats được kiểm trong test suite
+  ---
+  duration_ms: 0.071382
+  type: 'test'
+  ...
+# Subtest: route GET /api/health được kiểm trong test suite
+ok 225 - route GET /api/health được kiểm trong test suite
+  ---
+  duration_ms: 0.077092
+  type: 'test'
+  ...
+# Subtest: route GET /api/licenses được kiểm trong test suite
+ok 226 - route GET /api/licenses được kiểm trong test suite
+  ---
+  duration_ms: 0.089876
+  type: 'test'
+  ...
+# Subtest: route GET /api/licenses/:id được kiểm trong test suite
+ok 227 - route GET /api/licenses/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.088188
+  type: 'test'
+  ...
+# Subtest: route GET /api/monitoring/checks được kiểm trong test suite
+ok 228 - route GET /api/monitoring/checks được kiểm trong test suite
+  ---
+  duration_ms: 0.068623
+  type: 'test'
+  ...
+# Subtest: route GET /api/monitoring/checks/:id được kiểm trong test suite
+ok 229 - route GET /api/monitoring/checks/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.298562
+  type: 'test'
+  ...
+# Subtest: route GET /api/monitoring/history được kiểm trong test suite
+ok 230 - route GET /api/monitoring/history được kiểm trong test suite
+  ---
+  duration_ms: 0.086415
+  type: 'test'
+  ...
+# Subtest: route GET /api/monitoring/status được kiểm trong test suite
+ok 231 - route GET /api/monitoring/status được kiểm trong test suite
+  ---
+  duration_ms: 0.07833
+  type: 'test'
+  ...
+# Subtest: route GET /api/notifications được kiểm trong test suite
+ok 232 - route GET /api/notifications được kiểm trong test suite
+  ---
+  duration_ms: 0.086411
+  type: 'test'
+  ...
+# Subtest: route GET /api/problems được kiểm trong test suite
+ok 233 - route GET /api/problems được kiểm trong test suite
+  ---
+  duration_ms: 0.094106
+  type: 'test'
+  ...
+# Subtest: route GET /api/problems/:id được kiểm trong test suite
+ok 234 - route GET /api/problems/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.535738
+  type: 'test'
+  ...
+# Subtest: route GET /api/tickets được kiểm trong test suite
+ok 235 - route GET /api/tickets được kiểm trong test suite
+  ---
+  duration_ms: 0.117448
+  type: 'test'
+  ...
+# Subtest: route GET /api/tickets/:id được kiểm trong test suite
+ok 236 - route GET /api/tickets/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.115531
+  type: 'test'
+  ...
+# Subtest: route GET /api/tickets/:id/timeline được kiểm trong test suite
+ok 237 - route GET /api/tickets/:id/timeline được kiểm trong test suite
+  ---
+  duration_ms: 0.352166
+  type: 'test'
+  ...
+# Subtest: route GET /api/tickets/export.csv được kiểm trong test suite
+ok 238 - route GET /api/tickets/export.csv được kiểm trong test suite
+  ---
+  duration_ms: 0.088178
+  type: 'test'
+  ...
+# Subtest: route GET /metrics được kiểm trong test suite
+ok 239 - route GET /metrics được kiểm trong test suite
+  ---
+  duration_ms: 0.132309
+  type: 'test'
+  ...
+# Subtest: route PATCH /api/assets/:id được kiểm trong test suite
+ok 240 - route PATCH /api/assets/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.07542
+  type: 'test'
+  ...
+# Subtest: route PATCH /api/changes/:id được kiểm trong test suite
+ok 241 - route PATCH /api/changes/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.327126
+  type: 'test'
+  ...
+# Subtest: route PATCH /api/monitoring/checks/:id được kiểm trong test suite
+ok 242 - route PATCH /api/monitoring/checks/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.175168
+  type: 'test'
+  ...
+# Subtest: route PATCH /api/problems/:id được kiểm trong test suite
+ok 243 - route PATCH /api/problems/:id được kiểm trong test suite
+  ---
+  duration_ms: 0.216075
+  type: 'test'
+  ...
+# Subtest: route PATCH /api/tickets/:id/status được kiểm trong test suite
+ok 244 - route PATCH /api/tickets/:id/status được kiểm trong test suite
+  ---
+  duration_ms: 0.070791
+  type: 'test'
+  ...
+# Subtest: route POST /api/access-requests được kiểm trong test suite
+ok 245 - route POST /api/access-requests được kiểm trong test suite
+  ---
+  duration_ms: 12.964516
+  type: 'test'
+  ...
+# Subtest: route POST /api/access-requests/:id/approve được kiểm trong test suite
+ok 246 - route POST /api/access-requests/:id/approve được kiểm trong test suite
+  ---
+  duration_ms: 0.264638
+  type: 'test'
+  ...
+# Subtest: route POST /api/access-requests/:id/complete được kiểm trong test suite
+ok 247 - route POST /api/access-requests/:id/complete được kiểm trong test suite
+  ---
+  duration_ms: 0.193243
+  type: 'test'
+  ...
+# Subtest: route POST /api/access-requests/:id/offboard được kiểm trong test suite
+ok 248 - route POST /api/access-requests/:id/offboard được kiểm trong test suite
+  ---
+  duration_ms: 0.192227
+  type: 'test'
+  ...
+# Subtest: route POST /api/ai/agent được kiểm trong test suite
+ok 249 - route POST /api/ai/agent được kiểm trong test suite
+  ---
+  duration_ms: 0.065605
+  type: 'test'
+  ...
+# Subtest: route POST /api/ai/agent/approve được kiểm trong test suite
+ok 250 - route POST /api/ai/agent/approve được kiểm trong test suite
+  ---
+  duration_ms: 0.094705
+  type: 'test'
+  ...
+# Subtest: route POST /api/ai/analyze được kiểm trong test suite
+ok 251 - route POST /api/ai/analyze được kiểm trong test suite
+  ---
+  duration_ms: 0.068989
+  type: 'test'
+  ...
+# Subtest: route POST /api/assets được kiểm trong test suite
+ok 252 - route POST /api/assets được kiểm trong test suite
+  ---
+  duration_ms: 0.0756
+  type: 'test'
+  ...
+# Subtest: route POST /api/assets/:id/assign được kiểm trong test suite
+ok 253 - route POST /api/assets/:id/assign được kiểm trong test suite
+  ---
+  duration_ms: 0.338059
+  type: 'test'
+  ...
+# Subtest: route POST /api/assets/:id/recover được kiểm trong test suite
+ok 254 - route POST /api/assets/:id/recover được kiểm trong test suite
+  ---
+  duration_ms: 0.35807
+  type: 'test'
+  ...
+# Subtest: route POST /api/auth/login được kiểm trong test suite
+ok 255 - route POST /api/auth/login được kiểm trong test suite
+  ---
+  duration_ms: 0.10004
+  type: 'test'
+  ...
+# Subtest: route POST /api/auth/logout được kiểm trong test suite
+ok 256 - route POST /api/auth/logout được kiểm trong test suite
+  ---
+  duration_ms: 0.090561
+  type: 'test'
+  ...
+# Subtest: route POST /api/changes được kiểm trong test suite
+ok 257 - route POST /api/changes được kiểm trong test suite
+  ---
+  duration_ms: 0.088596
+  type: 'test'
+  ...
+# Subtest: route POST /api/changes/:id/approve được kiểm trong test suite
+ok 258 - route POST /api/changes/:id/approve được kiểm trong test suite
+  ---
+  duration_ms: 26.437612
+  type: 'test'
+  ...
+# Subtest: route POST /api/changes/:id/close được kiểm trong test suite
+ok 259 - route POST /api/changes/:id/close được kiểm trong test suite
+  ---
+  duration_ms: 3.789062
+  type: 'test'
+  ...
+# Subtest: route POST /api/changes/:id/implement được kiểm trong test suite
+ok 260 - route POST /api/changes/:id/implement được kiểm trong test suite
+  ---
+  duration_ms: 6.134077
+  type: 'test'
+  ...
+# Subtest: route POST /api/integrations/minierp/incidents được kiểm trong test suite
+ok 261 - route POST /api/integrations/minierp/incidents được kiểm trong test suite
+  ---
+  duration_ms: 0.102676
+  type: 'test'
+  ...
+# Subtest: route POST /api/monitoring/checks được kiểm trong test suite
+ok 262 - route POST /api/monitoring/checks được kiểm trong test suite
+  ---
+  duration_ms: 0.210309
+  type: 'test'
+  ...
+# Subtest: route POST /api/monitoring/checks/:id/run được kiểm trong test suite
+ok 263 - route POST /api/monitoring/checks/:id/run được kiểm trong test suite
+  ---
+  duration_ms: 0.240263
+  type: 'test'
+  ...
+# Subtest: route POST /api/problems được kiểm trong test suite
+ok 264 - route POST /api/problems được kiểm trong test suite
+  ---
+  duration_ms: 0.099331
+  type: 'test'
+  ...
+# Subtest: route POST /api/problems/:id/link-ticket được kiểm trong test suite
+ok 265 - route POST /api/problems/:id/link-ticket được kiểm trong test suite
+  ---
+  duration_ms: 0.246344
+  type: 'test'
+  ...
+# Subtest: route POST /api/tickets được kiểm trong test suite
+ok 266 - route POST /api/tickets được kiểm trong test suite
+  ---
+  duration_ms: 0.088587
+  type: 'test'
+  ...
+# Subtest: route POST /api/tickets/:id/assign được kiểm trong test suite
+ok 267 - route POST /api/tickets/:id/assign được kiểm trong test suite
+  ---
+  duration_ms: 0.239649
+  type: 'test'
+  ...
+# Subtest: route POST /api/tickets/:id/transition được kiểm trong test suite
+ok 268 - route POST /api/tickets/:id/transition được kiểm trong test suite
+  ---
+  duration_ms: 1.807757
+  type: 'test'
+  ...
+# Subtest: route POST /api/tickets/:id/work-notes được kiểm trong test suite
+ok 269 - route POST /api/tickets/:id/work-notes được kiểm trong test suite
+  ---
+  duration_ms: 0.334208
+  type: 'test'
+  ...
+# Subtest: mỗi resource có cả ca thành công lẫn ca lỗi được kiểm
+ok 270 - mỗi resource có cả ca thành công lẫn ca lỗi được kiểm
+  ---
+  duration_ms: 16.357635
+  type: 'test'
+  ...
+# Subtest: CSV export endpoint được kiểm cả nội dung lẫn header
+ok 271 - CSV export endpoint được kiểm cả nội dung lẫn header
+  ---
+  duration_ms: 0.655251
+  type: 'test'
+  ...
+# Subtest: persistence được kiểm bằng restart thật (stop + start lại cùng dataDir)
+ok 272 - persistence được kiểm bằng restart thật (stop + start lại cùng dataDir)
+  ---
+  duration_ms: 0.373417
+  type: 'test'
+  ...
+# Subtest: scanner nhan dien duoc single, double va backtick path
+ok 273 - scanner nhan dien duoc single, double va backtick path
+  ---
+  duration_ms: 6.481674
+  type: 'test'
+  ...
+# Subtest: scanner nhan dien router.get va app.route(...).get chain
+ok 274 - scanner nhan dien router.get va app.route(...).get chain
+  ---
+  duration_ms: 15.584234
+  type: 'test'
+  ...
+# Subtest: scanner nhan dien array registration va tach thanh nhieu path
+ok 275 - scanner nhan dien array registration va tach thanh nhieu path
+  ---
+  duration_ms: 13.602032
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: path trong bien hoac template dong -> unresolved, khong bo qua im lang
+ok 276 - FAIL-CLOSED: path trong bien hoac template dong -> unresolved, khong bo qua im lang
+  ---
+  duration_ms: 419.35348
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: chuoi trong comment va string khong duoc dem nhu route
+ok 277 - FAIL-CLOSED: chuoi trong comment va string khong duoc dem nhu route
+  ---
+  duration_ms: 0.728418
+  type: 'test'
+  ...
+# Subtest: duplicate qua nhieu style van bi bat
+ok 278 - duplicate qua nhieu style van bi bat
+  ---
+  duration_ms: 0.762933
+  type: 'test'
+  ...
+# Subtest: scanner giu file:line cho moi registration
+ok 279 - scanner giu file:line cho moi registration
+  ---
+  duration_ms: 0.771722
+  type: 'test'
+  ...
+# Subtest: source that giu nguyen inventory 55 route, khong unresolved
+ok 280 - source that giu nguyen inventory 55 route, khong unresolved
+  ---
+  duration_ms: 96.716622
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: computed member app['get'] duoc inventory hoac bao unresolved
+ok 281 - FAIL-CLOSED: computed member app['get'] duoc inventory hoac bao unresolved
+  ---
+  duration_ms: 4.441038
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: router['post'] duoc inventory hoac bao unresolved
+ok 282 - FAIL-CLOSED: router['post'] duoc inventory hoac bao unresolved
+  ---
+  duration_ms: 6.232032
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: optional call app.get?.(...) duoc inventory hoac bao unresolved
+ok 283 - FAIL-CLOSED: optional call app.get?.(...) duoc inventory hoac bao unresolved
+  ---
+  duration_ms: 6.346014
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: computed verb dong app[verb] khong duoc im lang bo qua
+ok 284 - FAIL-CLOSED: computed verb dong app[verb] khong duoc im lang bo qua
+  ---
+  duration_ms: 283.993685
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: optional computed app?.[verb] khong duoc im lang bo qua
+ok 285 - FAIL-CLOSED: optional computed app?.[verb] khong duoc im lang bo qua
+  ---
+  duration_ms: 5.18084
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: scanner khong bao gio tra inventory rong cho source co route
+ok 286 - FAIL-CLOSED: scanner khong bao gio tra inventory rong cho source co route
+  ---
+  duration_ms: 1.845754
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: comment gap giua method va ( duoc inventory hoac unresolved
+ok 287 - FAIL-CLOSED: comment gap giua method va ( duoc inventory hoac unresolved
+  ---
+  duration_ms: 1.212617
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: comment gap tren computed member cung khong duoc bo qua
+ok 288 - FAIL-CLOSED: comment gap tren computed member cung khong duoc bo qua
+  ---
+  duration_ms: 0.664229
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: nhieu comment lien tie giua method va ( van duoc xu ly
+ok 289 - FAIL-CLOSED: nhieu comment lien tie giua method va ( van duoc xu ly
+  ---
+  duration_ms: 0.792234
+  type: 'test'
+  ...
+# Subtest: FAIL-CLOSED: newline truoc ( cung khong duoc bo qua
+ok 290 - FAIL-CLOSED: newline truoc ( cung khong duoc bo qua
+  ---
+  duration_ms: 1.084245
+  type: 'test'
+  ...
+# Subtest: journal: kill-mid-write (journal + tmp dở) -> restart giữ state cũ, không corrupt
+ok 291 - journal: kill-mid-write (journal + tmp dở) -> restart giữ state cũ, không corrupt
+  ---
+  duration_ms: 309.512806
+  type: 'test'
+  ...
+# Subtest: journal: crash sau tmp fsync đầy đủ -> replay đúng dữ liệu đã commit
+ok 292 - journal: crash sau tmp fsync đầy đủ -> replay đúng dữ liệu đã commit
+  ---
+  duration_ms: 200.927575
+  type: 'test'
+  ...
+# Subtest: journal: replay idempotent — recover lần 2 không đổi gì
+ok 293 - journal: replay idempotent — recover lần 2 không đổi gì
+  ---
+  duration_ms: 233.620413
+  type: 'test'
+  ...
+# Subtest: journal: normal write path cho kết quả byte-identical (trừ updatedAt)
+ok 294 - journal: normal write path cho kết quả byte-identical (trừ updatedAt)
+  ---
+  duration_ms: 447.299414
+  type: 'test'
+  ...
+# Subtest: store: seed khi data/db.json chưa tồn tại
+ok 295 - store: seed khi data/db.json chưa tồn tại
+  ---
+  duration_ms: 158.111186
+  type: 'test'
+  ...
+# Subtest: store: dữ liệu sống sót qua restart (commit -> load lại)
+ok 296 - store: dữ liệu sống sót qua restart (commit -> load lại)
+  ---
+  duration_ms: 220.459569
+  type: 'test'
+  ...
+# [store] db.json không hợp lệ (Expected property name or '}' in JSON at position 15 (line 1 column 16)) → đã backup db.json.corrupt-1790550191309-04da1a, khởi tạo lại từ dữ liệu mẫu.
+# Subtest: store: db.json hỏng -> backup .corrupt-* rồi seed, không ném exception
+ok 297 - store: db.json hỏng -> backup .corrupt-* rồi seed, không ném exception
+  ---
+  duration_ms: 119.175633
+  type: 'test'
+  ...
+# Subtest: store: nextId tăng dần theo collection, find trả bản ghi theo id số
+ok 298 - store: nextId tăng dần theo collection, find trả bản ghi theo id số
+  ---
+  duration_ms: 118.245398
+  type: 'test'
+  ...
+# Subtest: store: commit ghi tuần tự, lần load sau thấy bản ghi cuối cùng
+ok 299 - store: commit ghi tuần tự, lần load sau thấy bản ghi cuối cùng
+  ---
+  duration_ms: 978.557005
+  type: 'test'
+  ...
+# Subtest: store: snapshot có version + updatedAt ISO
+ok 300 - store: snapshot có version + updatedAt ISO
+  ---
+  duration_ms: 107.510536
+  type: 'test'
+  ...
+# Subtest: seed: cấu trúc dữ liệu mẫu hợp lệ (schema + ITIL realism)
+ok 301 - seed: cấu trúc dữ liệu mẫu hợp lệ (schema + ITIL realism)
+  ---
+  duration_ms: 0.393908
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets alerted=false khi notifier cho nguong duoi (Low)
+ok 302 - POST /api/tickets alerted=false khi notifier cho nguong duoi (Low)
+  ---
+  duration_ms: 651.583145
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets alerted=true khi notifier bao da gui (High)
+ok 303 - POST /api/tickets alerted=true khi notifier bao da gui (High)
+  ---
+  duration_ms: 186.339586
+  type: 'test'
+  ...
+# Subtest: POST /api/tickets khong duoc 500 khi notifier nem loi (van 201, alerted=false)
+ok 304 - POST /api/tickets khong duoc 500 khi notifier nem loi (van 201, alerted=false)
+  ---
+  duration_ms: 356.6739
+  type: 'test'
+  ...
+# [error] Error: disk full (simulated)
+#     at store.commit (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:42:38)
+#     at save (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:95:28)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:100:13
+#     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#     at async /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:175
+# Subtest: monitoring DOWN commit fail: check, incident, history va alert count ve nguyen state
+ok 305 - monitoring DOWN commit fail: check, incident, history va alert count ve nguyen state
+  ---
+  duration_ms: 904.655196
+  type: 'test'
+  ...
+# [error] Error: disk full (simulated)
+#     at store.commit (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:42:38)
+#     at save (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:95:28)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:100:13
+#     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#     at async /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:175
+# Subtest: monitoring UP commit fail: incident dang mo phai giu nguyen state va khong alert
+ok 306 - monitoring UP commit fail: incident dang mo phai giu nguyen state va khong alert
+  ---
+  duration_ms: 233.073317
+  type: 'test'
+  ...
+# [error] Error: probe exploded before commit
+#     at Object.runCheck (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:142:15)
+#     at probe (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:323:104)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:323
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:99:28
+#     at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+#     at transact (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:96:47)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:181
+#     at Layer.handle [as handle_request] (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/layer.js:95:5)
+#     at next (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/route.js:149:13)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/auth.js:97:16
+# Subtest: monitoring pre-commit exception: mutation truoc save cung phai rollback
+ok 307 - monitoring pre-commit exception: mutation truoc save cung phai rollback
+  ---
+  duration_ms: 167.750551
+  type: 'test'
+  ...
+# [error] Error: disk full (simulated)
+#     at store.commit (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:42:38)
+#     at save (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:95:28)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:100:13
+#     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#     at async /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:175
+# Subtest: rollback giu nguyen identity cua row dang ton tai (khong thay theo ca collection)
+ok 308 - rollback giu nguyen identity cua row dang ton tai (khong thay theo ca collection)
+  ---
+  duration_ms: 299.447823
+  type: 'test'
+  ...
+# [error] Error: disk full (simulated)
+#     at c.context.store.commit (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:222:22)
+#     at save (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:95:28)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:100:13
+#     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+#     at async /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:175
+# Subtest: rollback khong xoa ticket da commit cua request chay song song (memory + db.json)
+ok 309 - rollback khong xoa ticket da commit cua request chay song song (memory + db.json)
+  ---
+  duration_ms: 335.322969
+  type: 'test'
+  ...
+# [error] Error: probe exploded before commit
+#     at Object.runCheck (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:276:15)
+#     at probe (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:323:104)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:323
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:99:28
+#     at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+#     at transact (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:96:47)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:329:181
+#     at Layer.handle [as handle_request] (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/layer.js:95:5)
+#     at next (/Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/route.js:149:13)
+#     at /Users/mainguyenbinhtan/Downloads/Project/Enterprise-IT-Helpdesk-Lab/internal-portal/src/auth.js:97:16
+# Subtest: pre-commit exception rollback: chi field da ghi bi rewind, field khac giu nguyen
+ok 310 - pre-commit exception rollback: chi field da ghi bi rewind, field khac giu nguyen
+  ---
+  duration_ms: 137.161841
+  type: 'test'
+  ...
+# Subtest: app.js chỉ tham chiếu id có thật trong index.html
+ok 311 - app.js chỉ tham chiếu id có thật trong index.html
+  ---
+  duration_ms: 2.970111
+  type: 'test'
+  ...
+# Subtest: index.html khai báo đủ phần tử then chốt của 4 phân hệ
+ok 312 - index.html khai báo đủ phần tử then chốt của 4 phân hệ
+  ---
+  duration_ms: 0.229078
+  type: 'test'
+  ...
+# Subtest: các hàm gọi từ onclick trong app.js đều được định nghĩa
+ok 313 - các hàm gọi từ onclick trong app.js đều được định nghĩa
+  ---
+  duration_ms: 0.709201
+  type: 'test'
+  ...
+# Subtest: mọi lời gọi api/apiJson có body đều set Content-Type: application/json
+ok 314 - mọi lời gọi api/apiJson có body đều set Content-Type: application/json
+  ---
+  duration_ms: 0.681556
+  type: 'test'
+  ...
+# Subtest: CSS áp dụng thuộc tính hidden (không bị display:flex đè)
+ok 315 - CSS áp dụng thuộc tính hidden (không bị display:flex đè)
+  ---
+  duration_ms: 0.33362
+  type: 'test'
+  ...
+# Subtest: CSS chứa style cho các thành phần UI mới
+ok 316 - CSS chứa style cho các thành phần UI mới
+  ---
+  duration_ms: 0.216382
+  type: 'test'
+  ...
+# Subtest: CSS có responsive breakpoint + prefers-reduced-motion
+ok 317 - CSS có responsive breakpoint + prefers-reduced-motion
+  ---
+  duration_ms: 0.288009
+  type: 'test'
+  ...
+# Subtest: app.js không còn fetch() thô ngoài tầng API (error handling tập trung)
+ok 318 - app.js không còn fetch() thô ngoài tầng API (error handling tập trung)
+  ---
+  duration_ms: 0.239276
+  type: 'test'
+  ...
+# Subtest: mọi render ra HTML đều escapeHtml (chống XSS từ dữ liệu)
+ok 319 - mọi render ra HTML đều escapeHtml (chống XSS từ dữ liệu)
+  ---
+  duration_ms: 0.508178
+  type: 'test'
+  ...
+# Subtest: index.html cân bằng thẻ (không có thẻ mở chưa đóng)
+ok 320 - index.html cân bằng thẻ (không có thẻ mở chưa đóng)
+  ---
+  duration_ms: 1.267449
+  type: 'test'
+  ...
+# Subtest: index.html không có id trùng lặp (tránh DOM trả sai phần tử)
+ok 321 - index.html không có id trùng lặp (tránh DOM trả sai phần tử)
+  ---
+  duration_ms: 0.38609
+  type: 'test'
+  ...
+# Subtest: class JS thêm động vào DOM đều có định nghĩa trong CSS
+ok 322 - class JS thêm động vào DOM đều có định nghĩa trong CSS
+  ---
+  duration_ms: 0.791702
+  type: 'test'
+  ...
+# Subtest: mọi endpoint mà UI gọi đều tồn tại ở backend
+ok 323 - mọi endpoint mà UI gọi đều tồn tại ở backend
+  ---
+  duration_ms: 324.558389
+  type: 'test'
+  ...
+1..323
+# tests 323
+# suites 0
+# pass 322
+# fail 0
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 38885.990596

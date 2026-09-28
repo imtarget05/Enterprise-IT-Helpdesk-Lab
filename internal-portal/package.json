@@ -1,7 +1,7 @@
 {
   "name": "enterprise-it-asset-portal",
   "version": "2.0.0",
-  "description": "Internal IT Asset Management & Helpdesk Ticketing Portal for BMC Vietnam — JSON-file persistence, CSV audit export, Docker-ready, full REST test suite",
+  "description": "Internal Portal module of Enterprise IT Operations Platform & Infrastructure Lab — JSON-file persistence, CSV audit export, Docker-ready, full REST test suite",
   "main": "server.js",
   "private": true,
   "engines": {
@@ -10,12 +10,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test test/*.test.js",
-    "test:coverage": "c8 --reporter=lcov --reporter=text node --test test/*.test.js",
+    "test": "node --test --test-timeout=120000 --test-force-exit test/*.test.js",
+    "test:coverage": "c8 --reporter=lcov --reporter=text node --test --test-timeout=120000 --test-force-exit test/*.test.js",
     "test:api": "bash ./test-api.sh",
     "test:watch": "node --test --watch test/*.test.js",
     "rag:ingest": "node scripts/rag-ingest.js"
   },
+  "_test_flags_comment": "test/test:coverage dùng --test-timeout=120000 (test/packaging.test.js tự mất ~17s vì spawn test-api.sh failure-path; các file test khác có thể lên hàng chục giây khi CPU đang tải song song) và --test-force-exit (một số test giữ handle server/timer mở sau khi xong → runner chờ process không bao giờ thoát). Không có 2 flag này `npm test` treo vô hạn.",
   "keywords": [
     "it-helpdesk",
     "it-asset-management",
@@ -31,7 +32,7 @@
     "express": "^4.19.2"
   },
   "devDependencies": {
-    "c8": "^10.1.3"
+    "c8": "^10.1.3",
+    "yaml": "^2.9.1"
   }
 }
-

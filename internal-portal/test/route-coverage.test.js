@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { listSourceRoutes } = require('./list-routes');
+const { listSourceRoutes, listRawSourceRoutes, findDuplicateSignatures, unresolvedRegistrations } = require('./list-routes');
 
 const TEST_DIR = __dirname;
 const sources = fs
@@ -25,17 +25,43 @@ const shellRunner = path.join(TEST_DIR, '..', 'test-api.sh');
 if (fs.existsSync(shellRunner)) sources.push(fs.readFileSync(shellRunner, 'utf8'));
 const suite = sources.join('\n');
 
+// Coverage iterates the UNIQUE set (one row per method/path); duplicate
+// detection below runs on the RAW list so a dedupe cannot hide a shadowed
+// registration.
 const routes = listSourceRoutes();
+const rawRoutes = listRawSourceRoutes();
 
 test('danh sách route trích được từ src/app.js (không rỗng)', () => {
   assert.ok(routes.length >= 16, `mong đợi ≥16 route, nhận ${routes.length}`);
   const unique = new Set(routes.map((r) => `${r.method} ${r.path}`));
-  assert.equal(unique.size, routes.length, 'không được đăng ký trùng route');
+  assert.equal(unique.size, routes.length, 'compatibility set phai da dedupe');
+});
+
+test('route inventory fail-closed: khong registration nao bi scanner bo qua', () => {
+  // Review Important 4: if the inventory cannot resolve a registration, every
+  // gate built on it (duplicate, coverage, OpenAPI) is silently weakened. Fail
+  // loudly instead.
+  const unresolved = unresolvedRegistrations();
+  const detail = unresolved.map((u) => `${u.file}:${u.line} ${u.reason} | ${u.snippet}`).join('\n');
+  assert.equal(unresolved.length, 0, `route inventory khong resolve het ${unresolved.length} registration:\n${detail}`);
+});
+
+test('source registration khong dang ky trung route signature (raw, khong dedupe truoc)', () => {
+  // Running this on the raw list is the point: a second registration of the
+  // same method+path is a shadowed handler and must fail here with both
+  // occurrences named by file:line.
+  const duplicates = findDuplicateSignatures();
+  const detail = duplicates
+    .map((d) => `${d.method} ${d.path}: ${d.occurrences.map((o) => `${o.file}:${o.line}`).join(', ')}`)
+    .join('\n');
+  assert.equal(duplicates.length, 0, `trùng route signature (${rawRoutes.length} registrations thô):\n${detail}`);
 });
 
 for (const route of routes) {
   test(`route ${route.method} ${route.path} được kiểm trong test suite`, () => {
-    const basePath = `/api${route.path.replace(/^\/api/, '')}`;
+    // Routes outside /api (e.g. the public GET /metrics observability endpoint)
+    // keep their real path; only /api routes are already prefixed.
+    const basePath = route.path.startsWith('/api') ? route.path : route.path;
     // Route có tham số → test có thể gọi dạng literal ("/api/assets/1") hoặc template
     // (`/api/assets/${id}`), nên kiểm cả prefix không tham số.
     const prefix = basePath.replace(/\/:[A-Za-z0-9_]+.*$/, '');

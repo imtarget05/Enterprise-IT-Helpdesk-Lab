@@ -1,13 +1,14 @@
-# 🖥️ Enterprise IT Helpdesk Lab
+# 🖥️ Enterprise IT Operations Platform & Infrastructure Lab
 
-> **Dự án portfolio** mô phỏng môi trường IT doanh nghiệp (50–120 nhân viên),  
-> bao gồm **Windows Server 2022, Active Directory, Helpdesk Portal** và **PowerShell automation**.
+> **Dự án portfolio end-to-end** mô phỏng môi trường IT doanh nghiệp (50–120 nhân viên),
+> từ hạ tầng **Windows Server 2022, Active Directory, DNS, DHCP, GPO** đến **internal portal**, **PowerShell/Python automation** và **AI-assisted ITIL support**.
+> `internal-portal/` là control-plane phần mềm trong cùng project, không phải một project tách rời.
 
 <p align="center">
   <a href="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml">
     <img src="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml/badge.svg" alt="CI"/>
   </a>
-  <img src="https://img.shields.io/badge/Tests-160%2F160%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-329%2F330%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
   <img src="https://img.shields.io/badge/API%20Smoke-68%2F68%20Passing-brightgreen?logo=curl&logoColor=white" alt="API Checks"/>
   <img src="https://img.shields.io/badge/Node.js-18%20%7C%2020%20%7C%2022-339933?logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/PowerShell-AST%20or%20Static%20Fallback-5391FE?logo=powershell&logoColor=white" alt="PowerShell syntax verification"/>
@@ -16,6 +17,19 @@
   <img src="https://img.shields.io/badge/Active_Directory-Configured-0078D4?logo=microsoft&logoColor=white" alt="Active Directory"/>
   <img src="https://img.shields.io/badge/ITIL-20%20Tickets-orange?logo=itil&logoColor=white" alt="ITIL"/>
 </p>
+
+---
+
+## 🔒 Ma trận GPO / Chính sách bảo mật
+
+| Chính sách | Thiết lập đã triển khai |
+|---|---|
+| USB block | `GPO_Restrict_USB_Storage` — Deny all removable storage (OU Workstations, trừ IT) |
+| Screen lock | `GPO_ScreenLock_Timeout` — khóa màn hình có mật khẩu sau 10 phút không thao tác |
+| Share permissions | `FS01-SRV`: Share `Authenticated Users = Full Control/Change`; NTFS least-privilege theo `SG_HR_Users` / `SG_Accounting_Users` / `Public` Read & Write |
+| Password policy | `GPO_DefaultDomainPasswordPolicy` — tối thiểu 10 ký tự + complexity, đổi mỗi 90 ngày, khóa sau 5 lần sai trong 15 phút |
+
+Chi tiết đầy đủ: [docs/03-gpo-security-matrix.md](docs/03-gpo-security-matrix.md).
 
 ---
 
@@ -58,7 +72,7 @@ Web app chạy trong Docker, dành cho nhân viên IT dùng hàng ngày:
 | 🎫 **Quản lý ticket** | Tạo, theo dõi, đóng phiếu sự cố theo quy trình ITIL |
 | 🚨 **Cảnh báo tự động** | Ticket ưu tiên Cao/Khẩn → nhận thông báo tức thì, ghi audit log |
 | 📊 **Dashboard** | Tổng quan: số thiết bị, số ticket đang mở, tỉ lệ giải quyết đúng hạn |
-| 🤖 **Trợ lý AI (tùy chọn)** | Tích hợp LLM local (Ollama — không dùng ChatGPT/cloud) để gợi ý hướng chẩn đoán |
+| 🤖 **Trợ lý AI** | OpenAI (tuỳ chọn) → Ollama local → offline ITIL playbook fallback; gợi ý chẩn đoán và RCA |
 | 🏭 **Factory Operations** | Monitoring, Problem/Change, Access lifecycle, audit và 12 scenario vận hành tái lập được |
 
 ### 📋 3. 20 kịch bản sự cố thực chiến
@@ -142,8 +156,12 @@ npm install && npm start
 **Chạy test:**
 ```bash
 cd internal-portal
-npm test          # 160 test cases — tất cả pass ✅
+npm test          # 330 test cases — 329 pass, 1 skipped ✅
 ./test-api.sh     # 68 curl API smoke checks — tất cả pass ✅
+
+# 82 test của cổng Flask, chạy trên DATA_FILE tạm nên không chạm data/db.json của Node
+( cd python-portal && DATA_FILE="$(mktemp -d)/db.json" PORT=0 \
+    python3 -m unittest discover -s . -p 'test_*.py' )
 ```
 
 ---
@@ -166,7 +184,7 @@ Vào tab IT Assets → lọc theo trạng thái → nhấn "Xuất Danh Sách (C
 ```
 Vào tab Tickets → nhấn nút "AI" trên bất kỳ ticket nào
 → Hiển thị: tóm tắt sự cố, các bước chẩn đoán, nguyên nhân, cách phòng tránh
-(Hoạt động cả khi không có Ollama — dùng playbook offline)
+(Hoạt động cả khi không có OpenAI key hoặc Ollama — dùng playbook offline)
 ```
 
 ---
@@ -180,10 +198,10 @@ Vào tab Tickets → nhấn nút "AI" trên bất kỳ ticket nào
 ├── 📁 scenarios/factory/    ← 12 scenario tái lập được cho Factory IT
 ├── 📁 scripts/              ← PowerShell automation + CI/evidence helper
 ├── 📁 artifacts/            ← baseline và final verification evidence
-└── 📁 internal-portal/      ← Web app Node.js
+└── 📁 internal-portal/      ← Module control plane: Node.js portal + AI/ticket/asset API (cùng project)
     ├── 📁 src/              ← API server (Express) + auth/ITSM/monitoring
     ├── 📁 public/           ← Giao diện web (HTML/JS/CSS)
-    └── 📁 test/             ← 160 test cases + 12 factory scenario contract
+    └── 📁 test/             ← 330 test cases (329 pass, 1 skipped) + 12 factory scenario contract
 ```
 
 ---

@@ -6,9 +6,6 @@
   <meta name="description" content="Enterprise IT Asset & Helpdesk Portal — quản lý thiết bị, ticket ITIL, bản quyền phần mềm">
   <title>Enterprise IT Portal — Asset & Helpdesk Management</title>
   <link rel="stylesheet" href="styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-layout">
@@ -57,12 +54,39 @@
 
     <!-- Main Content -->
     <main class="main-content">
+      <!-- LAB AUTH: chỉ hiện khi /api/health báo authMode=lab và chưa có token.
+           Token chỉ sống trong sessionStorage, không ghi ra localStorage/URL/console. -->
+      <section id="auth-panel" class="auth-panel" hidden aria-labelledby="auth-title">
+        <div class="auth-card">
+          <h3 id="auth-title">Đăng nhập Portal (Lab Mode)</h3>
+          <p class="auth-hint">Portal đang chạy ở chế độ lab: cần Bearer token mới đọc được dữ liệu tài sản và ticket.</p>
+          <form id="login-form">
+            <div class="form-group">
+              <label for="auth-username">Tài khoản</label>
+              <input type="text" id="auth-username" name="username" autocomplete="username" required placeholder="viewer / admin">
+            </div>
+            <div class="form-group">
+              <label for="auth-password">Mật khẩu</label>
+              <input type="password" id="auth-password" name="password" autocomplete="current-password" required placeholder="Mật khẩu lab">
+            </div>
+            <div class="modal-actions">
+              <button type="submit" class="btn btn-primary" id="btn-login">Đăng nhập</button>
+            </div>
+          </form>
+          <p id="auth-error" class="auth-error" role="alert" hidden></p>
+        </div>
+      </section>
+
       <header class="top-header">
         <div>
           <h1 id="page-title">Hệ Thống Quản Lý Tài Sản & Hỗ Trợ Kỹ Thuật IT</h1>
           <div class="breadcrumb">Enterprise IT / Internal Portal / <span id="breadcrumb-tab">Dashboard</span></div>
         </div>
         <div class="header-actions">
+          <span class="auth-identity" id="auth-identity" hidden>
+            <span class="auth-identity-name" id="auth-user">Chưa đăng nhập</span>
+            <button class="btn btn-secondary btn-sm" id="btn-logout" type="button">Đăng xuất</button>
+          </span>
           <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Chuyển chế độ sáng tối">◐ Chế độ tối</button>
           <span class="status-indicator live" aria-hidden="true"></span>
           <span class="system-time" id="clock">Online</span>

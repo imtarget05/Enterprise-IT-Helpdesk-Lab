@@ -28,8 +28,11 @@ async function createTestClient(options = {}) {
 
   async function stop() {
     if (!server) return;
-    await new Promise((resolve) => server.close(resolve));
+    const current = server;
     server = undefined;
+    const closed = new Promise((resolve, reject) => current.close((err) => (err ? reject(err) : resolve())));
+    if (typeof current.closeAllConnections === 'function') current.closeAllConnections();
+    await closed;
   }
 
   function api(method, urlPath, body, extraHeaders = {}) {

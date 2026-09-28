@@ -10,6 +10,25 @@
  *  3. Corrupt-safe: db.json parse lỗi → đổi tên thành db.json.corrupt-<timestamp>
  *     rồi fallback về seed, server vẫn bật được.
  *  4. In-memory cache (`store.data`) → API đọc/ghi nhanh, chỉ flush ra đĩa khi mutate.
+ *  5. Write-ahead intent journal (`db.json.journal`): trước khi ghi đè db.json,
+ *     append 1 dòng intent (JSONL) + fsync journal → ghi tmp + fsync → rename
+ *     atomic → truncate journal. Crash giữa chừng để lại journal non-empty;
+ *     lần `load()` tiếp theo sẽ recover deterministically.
+ *
+ * RECOVERY POLICY (replay-or-discard, deterministic, idempotent):
+ *  - Mỗi dòng intent ghi lại `{op:'write', tmp:<basename>, sha256, bytes, at}`.
+ *  - Nếu crash SAU khi tmp đã fsync nhưng TRƯỚC rename: tmp còn trên đĩa,
+ *    nội dung verify OK (parse được JSON + khớp sha256) → REPLAY bằng cách
+ *    rename tmp → db.json (dữ liệu đã fsync nên không mất commit).
+ *  - Nếu crash TRƯỚC khi tmp hoàn chỉnh (tmp thiếu / parse lỗi / sai hash):
+ *    DISCARD tmp đó (unlink) — commit chưa từng fsync đầy đủ nên không được
+ *    phép thành db.json; db.json cũ vẫn nguyên vẹn nhờ rename-atomic.
+ *  - Nhiều dòng intent (nhiều crash chồng nhau): xử lý theo thứ tự, tmp hợp
+ *    lệ CUỐI CÙNG thắng — tương đương thứ tự persist ban đầu.
+ *  - Xong recover luôn truncate journal về rỗng → chạy lại recover lần 2 là
+ *    no-op (idempotent). Journal KHÔNG chứa full payload (chỉ intent + hash)
+ *    nên không bao giờ tự "bịa" dữ liệu: không có tmp hợp lệ thì giữ db.json
+ *    hiện tại và rơi về luồng corrupt-safe/seed sẵn có.
  */
 
 const fs = require('node:fs/promises');
@@ -36,11 +55,13 @@ function nowIso() {
 function createStore(options = {}) {
   const dataDir = path.resolve(options.dataDir || path.join(process.cwd(), 'data'));
   const file = path.join(dataDir, 'db.json');
+  const journalFile = `${file}.journal`;
   const seed = options.seed || seedData;
 
   const store = {
     dataDir,
     file,
+    journalFile,
     schemaVersion: SCHEMA_VERSION,
     data: defaultCollections(),
     seeded: false,
@@ -68,6 +89,7 @@ function createStore(options = {}) {
 
   store.load = async function load() {
     await fs.mkdir(dataDir, { recursive: true });
+    await recoverJournal();
     const snapshot = await readSnapshot();
     const sourceVersion = Number(snapshot && (snapshot.schemaVersion || snapshot.version)) || 0;
 
@@ -98,15 +120,115 @@ function createStore(options = {}) {
     return store.data;
   };
 
+  /** Ghi file + fsync trước khi trả về (đảm bảo dữ liệu đã xuống đĩa). */
+  async function writeFileSynced(target, data) {
+    const handle = await fs.open(target, 'w');
+    try {
+      await handle.writeFile(data, 'utf8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
+
+  /** Best-effort fsync thư mục để rename được durable (bỏ qua lỗi trên Windows). */
+  async function fsyncDir(dir) {
+    try {
+      const handle = await fs.open(dir, 'r');
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    } catch {
+      // Windows không cho open directory → bỏ qua, rename vẫn atomic.
+    }
+  }
+
+  /**
+   * Recover journal khi khởi động (xem RECOVERY POLICY ở header).
+   * Idempotent: cuối recover luôn truncate journal → chạy lại là no-op.
+   */
+  async function recoverJournal() {
+    let raw;
+    try {
+      raw = await fs.readFile(journalFile, 'utf8');
+    } catch (err) {
+      if (err.code === 'ENOENT') return { recovered: false, reason: 'no-journal' };
+      throw err;
+    }
+    const lines = raw.split('\n').filter((l) => l.trim() !== '');
+    if (lines.length === 0) return { recovered: false, reason: 'empty-journal' };
+    let replayed = null;
+    for (const line of lines) {
+      let intent;
+      try {
+        intent = JSON.parse(line);
+      } catch {
+        continue; // dòng intent dở (crash khi append) → discard dòng này
+      }
+      if (!intent || intent.op !== 'write' || typeof intent.tmp !== 'string') continue;
+      const tmpPath = path.isAbsolute(intent.tmp) ? intent.tmp : path.join(dataDir, path.basename(intent.tmp));
+      let tmpRaw;
+      try {
+        tmpRaw = await fs.readFile(tmpPath, 'utf8');
+      } catch (err) {
+        if (err.code === 'ENOENT') continue; // crash trước khi tmp ra đời → discard
+        throw err;
+      }
+      let valid = false;
+      try {
+        JSON.parse(tmpRaw); // tmp phải là JSON hoàn chỉnh
+        if (intent.sha256) {
+          const digest = crypto.createHash('sha256').update(tmpRaw, 'utf8').digest('hex');
+          // tmp được ghi kèm '\n' cuối file nhưng sha tính trên payload (không '\n':
+          // chấp nhận cả hai dạng để tương thích crash giữa chừng.
+          const digestNoNl = crypto.createHash('sha256')
+            .update(tmpRaw.endsWith('\n') ? tmpRaw.slice(0, -1) : tmpRaw, 'utf8').digest('hex');
+          valid = digest === intent.sha256 || digestNoNl === intent.sha256;
+        } else {
+          valid = true;
+        }
+      } catch {
+        valid = false;
+      }
+      if (valid) {
+        await fs.rename(tmpPath, file); // REPLAY intent đã fsync đầy đủ
+        replayed = tmpPath;
+      } else {
+        await fs.unlink(tmpPath).catch(() => {}); // DISCARD tmp dở/corrupt
+      }
+    }
+    await writeFileSynced(journalFile, ''); // truncate → idempotent
+    await fsyncDir(dataDir);
+    return { recovered: true, replayed };
+  }
+
   async function persist() {
     const payload = JSON.stringify(
       { version: 1, schemaVersion: SCHEMA_VERSION, updatedAt: nowIso(), ...store.data },
       null,
       2
     );
+    const digest = crypto.createHash('sha256').update(payload, 'utf8').digest('hex');
     const tmp = `${file}.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
-    await fs.writeFile(tmp, payload + '\n', 'utf8');
+    // 1. Journal intent TRƯỚC khi đụng tới db.json (fsync để crash-safe).
+    const intent = JSON.stringify({
+      op: 'write', tmp: path.basename(tmp), sha256: digest,
+      bytes: Buffer.byteLength(payload, 'utf8'), at: nowIso(),
+    }) + '\n';
+    const jh = await fs.open(journalFile, 'a');
+    try {
+      await jh.write(intent, null, 'utf8');
+      await jh.sync();
+    } finally {
+      await jh.close();
+    }
+    // 2. Ghi tmp + fsync → 3. rename atomic → 4. truncate journal.
+    await writeFileSynced(tmp, payload + '\n');
     await fs.rename(tmp, file);
+    await fsyncDir(dataDir);
+    await writeFileSynced(journalFile, '');
     return file;
   }
 
@@ -120,6 +242,8 @@ function createStore(options = {}) {
   store.flush = function flush() {
     return store.writeChain;
   };
+  /** Seams cho test journal (không dùng trong production code). */
+  store.recoverJournal = recoverJournal;
 
   store.nextId = function nextId(collection, start = 1) {
     const rows = store.data[collection] || [];

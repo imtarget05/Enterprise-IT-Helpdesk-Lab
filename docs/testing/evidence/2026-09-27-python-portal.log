@@ -1,0 +1,10 @@
+# Session log 2026-09-27 — Helpdesk python-portal (observed output, key lines)
+
+Command: `DATA_FILE=/tmp/hd-qa-db.json PORT=0 /tmp/factorygen/bin/python -m unittest discover -s . -p 'test_*.py'`
+in `internal-portal/python-portal/`
+Observed: `Ran 85 tests in 44.444s` → `FAILED (failures=4, errors=51)`
+Root cause (sampled traceback, `tests/test_app_isolation.py` via `tests/harness.py:79`
+`importlib.import_module("app")` → `app.py:35 from flask import …`):
+`ModuleNotFoundError: No module named 'flask'`.
+`flask` absent in system python3, factorygen venv, and gateway venv alike.
+Verdict: ENV-BLOCKED offline (CI-ONLY); last-known 79 + 6 Phase-2 pass (HARD_TEST_REPORT.md §III).

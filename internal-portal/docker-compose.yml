@@ -1,9 +1,12 @@
 # =============================================================================
 #  BMC IT PORTAL — Docker Compose
-#  Khởi động toàn bộ portal bằng 1 lệnh:  docker compose up -d
-#  Xem log:                    docker compose logs -f it-portal
-#  Dừng (giữ dữ liệu):         docker compose down
+#  Cluster: internal-portal. Quản trị theo cụm: xem scripts/docker-clusters.sh
+#  Khởi động toàn bộ portal bằng 1 lệnh:  docker compose -p internal-portal up -d
+#  Xem log:                    docker compose -p internal-portal logs -f it-portal
+#  Dừng (giữ dữ liệu):         docker compose -p internal-portal down
 # =============================================================================
+name: internal-portal
+
 services:
   # --- Vector DB cho RAG (tri thức runbook nội bộ) ---------------------------
   # Hồ sơ nhẹ: ~30MB RAM khi chưa có dữ liệu. Portal tự fallback InMemory
@@ -21,6 +24,7 @@ services:
       - qdrant-storage:/qdrant/storage
     networks:
       - it-network
+      - portfolio-net
     logging:
       driver: json-file
       options:
@@ -48,7 +52,7 @@ services:
       DATA_DIR: ${DATA_DIR:-/app/data}
       IT_WEBHOOK_URL: ${IT_WEBHOOK_URL:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
-      # AI assistant — LLM LOCAL qua Ollama chạy trên máy HOST (không dùng OpenAI).
+      # AI assistant — OpenAI (nếu có key) → Ollama local qua HOST → playbook offline.
       # Từ trong container, host.docker.internal trỏ về máy host (xem extra_hosts).
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
@@ -102,6 +106,7 @@ services:
       retries: 3
     networks:
       - it-network
+      - portfolio-net
     labels:
       app.kubernetes.io/version: ${APP_PORT:-3000}
       app.kubernetes.io/component: it-asset-helpdesk-portal
@@ -110,6 +115,9 @@ services:
 networks:
   it-network:
     driver: bridge
+  portfolio-net:
+    external: true
+    name: portfolio-net
 
 volumes:
   qdrant-storage:

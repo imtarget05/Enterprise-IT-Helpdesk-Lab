@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * API tests cho AI Assistant (LLM LOCAL qua Ollama — không OpenAI):
- *   1. Engine 'rule-based' (Ollama không khả dụng) — status/analyze/400/404.
+ * API tests cho AI Assistant (OpenAI tuỳ chọn → Ollama local → playbook offline):
+ *   1. Engine 'rule-based' (không có provider) — status/analyze/400/404.
  *   2. Engine 'ollama' — inject fetchImpl giả lập, không cần cài Ollama.
  *   3. Fail-soft: JSON hỏng từ model → fallback rule-based, không 500.
  */

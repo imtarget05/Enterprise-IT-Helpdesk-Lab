@@ -5,11 +5,17 @@ node_modules/
 data/*.json
 data/*.log
 data/*.corrupt-*
+data/*.bak
+data/db.json.tmp-*
 !data/.gitkeep
 
 # Báo cáo xuất thử nghiệm
 exports/
 *.csv
+
+# Flask alternate data riêng (isolated — không dùng chung Node data)
+python-portal/data/
+python-portal/__pycache__/
 
 # Log hệ thống
 npm-debug.log*

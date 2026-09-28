@@ -1,0 +1,9 @@
+# Session log 2026-09-27 — Helpdesk node suite (observed output, key lines)
+
+Command: `node --test 'test/*.test.js'` in `internal-portal/` (node v22.20.0)
+Observed tail:
+  `ok 323 - mọi endpoint mà UI gọi đều tồn tại ở backend`
+  `# tests 323 / # pass 322 / # fail 0 / # cancelled 0 / # skipped 1 / # duration_ms 76060`
+Skip: `ok 39 - ai-adversarial: live gateway prompt injection test # SKIP LIVE_TESTS!=1, skipping live adversarial LLM test`
+Verdict: 322 pass / 0 fail / 1 skip VERIFIED.
+NOTE: count differs from HARD_TEST_REPORT.md (278/1) and the 269 badge — suite grew.

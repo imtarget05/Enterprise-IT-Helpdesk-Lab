@@ -46,7 +46,7 @@ tags:
   - name: Notifications
     description: Lịch sử cảnh báo tự động (webhook/mock)
   - name: AI
-    description: Trợ lý AI phân tích ticket bằng LLM chạy LOCAL qua Ollama (không dùng OpenAI) — tự fallback playbook rule-based offline
+    description: Trợ lý AI phân tích ticket theo chuỗi OpenAI (tuỳ chọn) → Ollama local → playbook rule-based offline
   - name: Auth
     description: Đăng nhập lab, phiên Bearer và phân quyền RBAC
   - name: ITSM
@@ -81,11 +81,32 @@ paths:
                 service: enterprise-it-asset-portal
                 version: 2.0.0
                 host: it-portal
+                authMode: legacy
                 counts:
                   assets: 6
                   tickets: 6
                   licenses: 4
                 webhook: mock
+
+  /metrics:
+    get:
+      tags: [Monitoring]
+      summary: Prometheus text exposition (public observability endpoint)
+      operationId: getMetrics
+      description: |
+        Endpoint quan trắc công khai cho Prometheus scrape: không yêu cầu auth,
+        chỉ trả aggregate gauges/counters, không chứa PII hay ticket bodies.
+      responses:
+        '200':
+          description: Metrics ở định dạng Prometheus text exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                # HELP helpdesk_tickets_total Total tickets in store.
+                # TYPE helpdesk_tickets_total counter
+                helpdesk_tickets_total 6
 
   /api/dashboard/stats:
     get:
@@ -404,11 +425,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                status:
-                  $ref: '#/components/schemas/TicketStatus'
-              required: [status]
+              $ref: '#/components/schemas/TicketStatusUpdateInput'
             example:
               status: In Progress
       responses:
@@ -548,7 +565,7 @@ paths:
           rule-based offline** (keyword → runbook) và ghi lý do vào
           `fallbackReason`. Vẫn trả 200.
 
-        Không dùng OpenAI hay bất kỳ cloud API nào — toàn bộ inference chạy local.
+        OpenAI là tầng cloud tuỳ chọn; nếu không có key hoặc provider lỗi, hệ thống chuyển sang Ollama local rồi playbook rule-based offline.
       operationId: analyzeTicket
       requestBody:
         required: true
@@ -595,12 +612,160 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/ai/log-analysis:
+    post:
+      tags: [AI]
+      summary: Phân tích log infra — đếm lỗi, gom pattern, mask PII, gợi runbook (FPT AI Camera)
+      description: |
+        Offline-first: parse rule-based thật rồi best-effort enrich bằng LLM local.
+        Nhận `{ logs: string[] (1-200 dòng), service?, metrics? }`, trả
+        `{ severity, errorCount, topPatterns, evidenceLines (đã mask PII VN), suggestedRunbook }`.
+        Kết quả được ghi audit vào `auditEvents`.
+      operationId: analyzeLogs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [logs]
+              properties:
+                logs: { type: array, items: { type: string }, example: ['2026-09-28 ERROR payment timeout 504', 'ERROR DB connection refused'] }
+                service: { type: string, example: 'order-api' }
+                metrics: { type: object, example: { p95_ms: 1800 } }
+      responses:
+        '200':
+          description: Kết quả log-analysis
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/ai/agent:
+    post:
+      tags: [AI]
+      summary: Chạy agentic loop — PLAN → ACT → OBSERVE (tool-calling trên dữ liệu portal)
+      description: |
+        Khác `POST /api/ai/analyze` ở chỗ: analyze gọi LLM **một lần** rồi trả
+        về; endpoint này cho agent **tự chọn tool và gọi thật**:
+
+        - **PLAN** — hệ thống đưa danh sách tool cho LLM, LLM chọn tool + tham số.
+        - **ACT** — chạy tool **đọc** (`search_tickets`, `get_ticket`,
+          `find_assets`, `search_knowledge`).
+        - **OBSERVE** — kết quả tool được đưa lại vòng lặp để LLM quyết định bước
+          kế tiếp (tối đa `maxSteps` bước).
+        - **UPDATE** — dựng câu trả lời, ghi vào session memory, học long-term
+          memory từ thông tin người dùng tự khai.
+
+        **Kiểm soát hành động:** tool `sideEffect` (`create_ticket`,
+        `add_work_note`) **không bao giờ tự chạy**. Agent chỉ đề xuất, trả
+        `status: needs_approval` kèm `proposedAction.token`; người dùng phải gọi
+        `POST /api/ai/agent/approve` để mới ghi dữ liệu thật. Token một lần dùng,
+        tự hết hạn, không replay được.
+
+        **Guardrails:** câu hỏi chứa chỉ dẫn prompt-injection bị chặn
+        (`status: blocked`); output bị lọc secret trước khi trả về. Không có LLM
+        nào chạy được thì agent rơi về rule-based — endpoint vẫn trả 200.
+      operationId: runAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string, example: 'Ticket 1001 đang ở trạng thái nào và có bị breach SLA không?' }
+                sessionId: { type: string, example: 'demo-session-1' }
+                tenant: { type: string, example: 'default' }
+            examples:
+              readOnly:
+                summary: Câu hỏi chỉ đọc — agent tự tra cứu, không cần duyệt
+                value:
+                  question: 'Có ticket nào đang mở về VPN không?'
+              sideEffect:
+                summary: Yêu cầu ghi dữ liệu — agent đề xuất, chờ duyệt
+                value:
+                  question: 'Tạo ticket cho máy in phòng kế toán bị kẹt giấy'
+      responses:
+        '200':
+          description: Kết quả vòng lặp agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRun'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/ai/agent/status:
+    get:
+      tags: [AI]
+      summary: Năng lực agent — engine, tool registry, bộ nhớ
+      description: |
+        Báo cáo engine đang dùng (`rule-based` khi không có LLM nào chạy được),
+        tool nào được phép tự chạy (`autoAllowed`) và tool nào cần người duyệt
+        (`sideEffect`), cùng số phiên đang mở và số ký ức dài hạn đã lưu.
+      operationId: getAgentStatus
+      responses:
+        '200':
+          description: Mô tả năng lực agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentStatus'
+
+  /api/ai/agent/approve:
+    post:
+      tags: [AI]
+      summary: Phê duyệt (hoặc từ chối) hành động ghi dữ liệu mà agent đề xuất
+      description: |
+        **Điểm duy nhất trong hệ thống nơi tool side-effect thực sự ghi dữ liệu.**
+        Chỉ chạy sau khi token còn hợp lệ (chưa dùng, chưa hết hạn) và người gọi
+        có quyền `TICKET_WRITE`.
+
+        - `{"token": "..."}` → thực thi hành động đã đóng băng, trả kết quả tool.
+        - `{"token": "...", "approved": false}` → từ chối, huỷ token.
+
+        Tham số được **đóng băng tại lúc đề xuất**: người duyệt đúng cái agent đã
+        hiển thị, không phải thứ bị thay đổi giữa lúc đề xuất và lúc duyệt.
+        Token dùng một lần là hết — replay trả 404.
+      operationId: approveAgentAction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, example: act_m1x2y3_ab12cd34 }
+                approved: { type: boolean, default: true }
+                tenant: { type: string, example: default }
+      responses:
+        '200':
+          description: Hành động đã thực thi (hoặc đã từ chối)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executed: { type: boolean, example: true }
+                  tool: { type: string, example: create_ticket }
+                  args: { type: object }
+                  result: { type: object }
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
 
   /api/auth/login:
     post:
       tags: [Auth]
       summary: Đăng nhập lab và nhận Bearer token
+      operationId: login
       security: []
       requestBody:
         required: true
@@ -631,6 +796,7 @@ paths:
     post:
       tags: [Auth]
       summary: Thu hồi Bearer session hiện tại
+      operationId: logout
       security: [{ BearerAuth: [] }]
       responses:
         '200':
@@ -641,6 +807,7 @@ paths:
     get:
       tags: [Auth]
       summary: Đọc user và quyền hiện tại
+      operationId: getCurrentUser
       security: [{ BearerAuth: [] }]
       responses:
         '200':
@@ -658,6 +825,7 @@ paths:
     get:
       tags: [Tickets]
       summary: Timeline sự kiện của ticket
+      operationId: getTicketTimeline
       security: [{ BearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/PathId' }]
       responses:
@@ -673,6 +841,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Gán ticket cho L1/L2 hoặc nhóm
+      operationId: assignTicket
       security: [{ BearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/PathId' }]
       requestBody:
@@ -694,6 +863,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Thêm work note đã sanitize vào timeline
+      operationId: addTicketWorkNote
       security: [{ BearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/PathId' }]
       requestBody:
@@ -715,6 +885,7 @@ paths:
     post:
       tags: [Tickets]
       summary: Chuyển state chuẩn NEW/ASSIGNED/IN_PROGRESS/PENDING/RESOLVED/CLOSED
+      operationId: transitionTicket
       security: [{ BearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/PathId' }]
       requestBody:
@@ -739,6 +910,7 @@ paths:
     post:
       tags: [Assets]
       summary: Cấp phát tài sản cho nhân viên
+      operationId: assignAsset
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -762,6 +934,7 @@ paths:
     post:
       tags: [Assets]
       summary: Thu hồi tài sản về kho
+      operationId: recoverAsset
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Tài sản ở state IN_STOCK }
@@ -773,6 +946,7 @@ paths:
     get:
       tags: [ITSM]
       summary: Danh sách problem record
+      operationId: listProblems
       security: [{ BearerAuth: [] }]
       responses:
         '200':
@@ -784,6 +958,7 @@ paths:
     post:
       tags: [ITSM]
       summary: Tạo problem record
+      operationId: createProblem
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -809,6 +984,7 @@ paths:
     get:
       tags: [ITSM]
       summary: Chi tiết problem
+      operationId: getProblem
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Problem record }
@@ -816,6 +992,7 @@ paths:
     patch:
       tags: [ITSM]
       summary: Cập nhật problem
+      operationId: updateProblem
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -840,6 +1017,7 @@ paths:
     post:
       tags: [ITSM]
       summary: Liên kết ticket vào problem (idempotent)
+      operationId: linkProblemTicket
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -857,6 +1035,7 @@ paths:
     get:
       tags: [ITSM]
       summary: Danh sách change record
+      operationId: listChanges
       security: [{ BearerAuth: [] }]
       responses:
         '200':
@@ -867,6 +1046,7 @@ paths:
     post:
       tags: [ITSM]
       summary: Tạo change record; high risk bắt buộc rollback plan
+      operationId: createChange
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -892,6 +1072,7 @@ paths:
     get:
       tags: [ITSM]
       summary: Chi tiết change
+      operationId: getChange
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Change record }
@@ -899,6 +1080,7 @@ paths:
     patch:
       tags: [ITSM]
       summary: Cập nhật change
+      operationId: updateChange
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -914,6 +1096,7 @@ paths:
     post:
       tags: [ITSM]
       summary: Duyệt change
+      operationId: approveChange
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Change đã duyệt }
@@ -925,6 +1108,7 @@ paths:
     post:
       tags: [ITSM]
       summary: Bắt đầu triển khai change
+      operationId: implementChange
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Change đang triển khai }
@@ -935,6 +1119,7 @@ paths:
     post:
       tags: [ITSM]
       summary: Đóng change sau verification
+      operationId: closeChange
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Change đã đóng }
@@ -944,6 +1129,7 @@ paths:
     get:
       tags: [ITSM]
       summary: Danh sách access request
+      operationId: listAccessRequests
       security: [{ BearerAuth: [] }]
       responses:
         '200':
@@ -954,6 +1140,7 @@ paths:
     post:
       tags: [ITSM]
       summary: Tạo onboarding hoặc offboarding request
+      operationId: createAccessRequest
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -979,6 +1166,7 @@ paths:
     get:
       tags: [ITSM]
       summary: Chi tiết access request
+      operationId: getAccessRequest
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Access request }
@@ -989,6 +1177,7 @@ paths:
     post:
       tags: [ITSM]
       summary: HR/IT approval
+      operationId: approveAccessRequest
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Request đã sẵn sàng }
@@ -1000,6 +1189,7 @@ paths:
     get:
       tags: [ITSM]
       summary: JSON handoff an toàn cho PowerShell operator
+      operationId: getAccessRequestHandoff
       security: [{ BearerAuth: [] }]
       responses:
         '200': { description: Handoff payload không chứa command tùy ý }
@@ -1010,9 +1200,14 @@ paths:
     post:
       tags: [ITSM]
       summary: Đánh dấu onboarding đã hoàn tất
+      operationId: completeAccessRequest
       security: [{ BearerAuth: [] }]
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
           description: Request completed, idempotent
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -1021,9 +1216,14 @@ paths:
     post:
       tags: [ITSM]
       summary: Đánh dấu offboarding đã hoàn tất
+      operationId: offboardAccessRequest
       security: [{ BearerAuth: [] }]
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
           description: Offboarding completed, idempotent
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/Unprocessable' }
@@ -1032,12 +1232,19 @@ paths:
     get:
       tags: [Monitoring]
       summary: Danh sách monitoring check
+      operationId: listMonitoringChecks
       security: [{ BearerAuth: [] }]
       responses:
-        '200': { description: Monitoring checks }
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringCheckList'
+          description: Monitoring checks
     post:
       tags: [Monitoring]
       summary: Tạo HTTP/TCP/DNS check
+      operationId: createMonitoringCheck
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -1053,7 +1260,12 @@ paths:
                 port: { type: integer, example: 443 }
                 failureThreshold: { type: integer, minimum: 1, default: 3 }
       responses:
-        '201': { description: Check đã tạo }
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringCheck'
+          description: Check đã tạo
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/Unprocessable' }
@@ -1063,13 +1275,20 @@ paths:
     get:
       tags: [Monitoring]
       summary: Chi tiết monitoring check
+      operationId: getMonitoringCheck
       security: [{ BearerAuth: [] }]
       responses:
-        '200': { description: Monitoring check }
+        '200':
+          description: Monitoring check
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringCheck'
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Monitoring]
       summary: Cập nhật check
+      operationId: updateMonitoringCheck
       security: [{ BearerAuth: [] }]
       requestBody:
         required: true
@@ -1077,7 +1296,12 @@ paths:
           application/json:
             schema: { type: object, additionalProperties: true }
       responses:
-        '200': { description: Check sau cập nhật }
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringCheck'
+          description: Check sau cập nhật
         '404': { $ref: '#/components/responses/NotFound' }
 
   /api/monitoring/checks/{id}/run:
@@ -1085,6 +1309,7 @@ paths:
     post:
       tags: [Monitoring]
       summary: Chạy probe; tạo incident khi đạt threshold và dedupe khi đang mở
+      operationId: runMonitoringCheck
       security: [{ BearerAuth: [] }]
       requestBody:
         required: false
@@ -1095,6 +1320,10 @@ paths:
               properties: { status: { type: string, enum: [UP, DOWN, DEGRADED] } }
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringRunResult'
           description: Check, history và incident correlation
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -1102,46 +1331,96 @@ paths:
     get:
       tags: [Monitoring]
       summary: Tổng hợp trạng thái check
+      operationId: getMonitoringStatus
       security: [{ BearerAuth: [] }]
       responses:
-        '200': { description: Số check theo trạng thái }
+        '200':
+          description: Tổng hợp số check theo trạng thái
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringStatus'
 
   /api/monitoring/history:
     get:
       tags: [Monitoring]
       summary: Lịch sử probe theo check
+      operationId: getMonitoringHistory
       security: [{ BearerAuth: [] }]
       parameters:
         - { name: checkId, in: query, schema: { type: integer } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
       responses:
-        '200': { description: Lịch sử có correlation ID }
+        '200':
+          description: Lịch sử có correlation ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitoringHistoryPage'
+
+  /api/monitoring/ops-report:
+    get:
+      tags: [Monitoring]
+      summary: Automated operational report (monitoring + SLA + backlog + AI activity)
+      operationId: getMonitoringOpsReport
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: windowHours
+          in: query
+          description: Cửa sổ báo cáo (giờ), clamp về [1, 168], mặc định 24
+          schema: { type: integer, minimum: 1, maximum: 168, default: 24 }
+        - name: format
+          in: query
+          description: json (mặc định) hoặc markdown để paste vào ticket/standup
+          schema: { type: string, enum: [json, markdown], default: json }
+      responses:
+        '200':
+          description: Aggregate-only report (count/rollup — không chứa title, requester hay log body)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [generatedAt, window, overallStatus, monitoring, tickets, ai, summary]
+                properties:
+                  generatedAt: { type: string, format: date-time }
+                  overallStatus: { type: string, enum: [HEALTHY, DEGRADED, ATTENTION] }
+                  window:
+                    type: object
+                    properties:
+                      from: { type: string, format: date-time }
+                      to: { type: string, format: date-time }
+                      hours: { type: integer }
+                  monitoring: { type: object }
+                  tickets: { type: object }
+                  ai: { type: object }
+                  summary: { type: array, items: { type: string } }
+            text/markdown:
+              schema: { type: string }
 
   /api/integrations/minierp/incidents:
     post:
       tags: [Integrations]
       summary: Nhận incident MiniERP idempotent theo externalRef
+      operationId: receiveMiniErpIncident
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [externalRef, title]
-              properties:
-                externalRef: { type: string, example: ERP-2026-0001 }
-                source: { type: string, enum: [MINIERP], default: MINIERP }
-                title: { type: string, example: ERP transaction failed }
-                severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
-                service: { type: string, example: MiniERP }
-                description: { type: string }
-                referenceType: { type: string }
-                referenceNo: { type: string }
+              $ref: '#/components/schemas/MiniERPIncidentInput'
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MiniERPIncident'
           description: Payload trùng, trả lại ticket cũ kèm idempotent=true
         '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MiniERPIncident'
           description: Ticket mới
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { description: Sai integration key }
@@ -1152,11 +1431,17 @@ paths:
     get:
       tags: [Audit]
       summary: Đọc audit trail gần đây
+      operationId: listAuditEvents
       security: [{ BearerAuth: [] }]
       parameters:
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
       responses:
-        '200': { description: Audit event đã lưu bền vững }
+        '200':
+          description: Danh sách audit event đã lưu bền vững
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventList'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -1338,16 +1623,26 @@ components:
 
     AuditEvent:
       type: object
+      description: Một dòng audit trail
       required: [id, at, actor, action, entityType]
       properties:
         id: { type: integer }
-        at: { type: string, format: date-time }
+        at: { type: string }
         actor: { type: string }
         role: { type: string }
         action: { type: string, example: TICKET_TRANSITION }
         entityType: { type: string }
         entityId: { type: integer, nullable: true }
         details: { type: object, additionalProperties: true }
+
+    AssetLifecycleStatus:
+      type: string
+      description: >-
+        Trạng thái vòng đời của tài sản. Runtime chấp nhận CẢ tên canonical
+        (`IN_STOCK`, `ASSIGNED`, `REPAIR`, `LOST`) lẫn nhãn legacy
+        (`Active`, `In Storage`, `Maintenance`, `Retired`); `lifecycleStatus`
+        được quy đổi sang nhãn canonical khi input dùng tên legacy.
+      enum: [IN_STOCK, ASSIGNED, REPAIR, LOST, Active, 'In Storage', Maintenance, Retired]
 
     AssetStatus:
       type: string
@@ -1398,7 +1693,7 @@ components:
           type: string
           example: IT Support
         status:
-          $ref: '#/components/schemas/AssetStatus'
+          $ref: '#/components/schemas/AssetLifecycleStatus'
         ip:
           type: string
           description: Địa chỉ IP đang cấp, `-` nếu chưa gán
@@ -1414,60 +1709,105 @@ components:
 
     AssetInput:
       type: object
-      description: Payload đăng ký tài sản mới
-      required: [tag, brand, model, serial]
+      description: >-
+        Payload đăng ký tài sản mới. Runtime chấp nhận các tên tương đương
+        (`assetTag`/`tag`, `manufacturer`/`brand`, `serialNumber`/`serial`) và
+        fallback độc lập cho từng cặp. `anyOf` mô tả đủ tám tổ hợp alias hợp lệ
+        thay vì `oneOf`, vốn từ chối payload chứa cả hai tên của cùng một cặp.
       properties:
-        tag:
-          type: string
-          example: LP-SALES-021
-        type:
-          type: string
-          default: Laptop
-        brand:
-          type: string
-          example: Dell
-        model:
-          type: string
-          example: Latitude 5450
-        serial:
-          type: string
-          example: 9PLK21X
-        assignedTo:
-          type: string
-          default: Unassigned
-        dept:
-          type: string
-          default: General
-        status:
-          allOf:
-            - $ref: '#/components/schemas/AssetStatus'
-          default: Active
-        ip:
-          type: string
-          default: '-'
+        assetTag: { type: string, description: Mã tài sản (canonical), example: LP-SALES-021 }
+        assetType: { type: string, description: Loại thiết bị (canonical), example: LAPTOP }
+        manufacturer: { type: string, description: Hãng sản xuất (canonical), example: Dell }
+        serialNumber: { type: string, description: Số serial (canonical), example: 9PLK21X }
+        employee: { type: string, description: Người được giao (alias của `assignedTo`), example: Le Hoang Nam }
+        assignedTo: { type: string, default: Unassigned }
+        tag: { type: string, description: Alias legacy của `assetTag`, example: LP-SALES-021 }
+        type: { type: string, description: Alias legacy của `assetType`, example: LAPTOP }
+        brand: { type: string, description: Alias legacy của `manufacturer`, example: Dell }
+        serial: { type: string, description: Alias legacy của `serialNumber`, example: 9PLK21X }
+        model: { type: string, example: Latitude 5450 }
+        dept: { type: string, default: General }
+        businessArea: { type: string }
+        location: { type: string }
+        hostname: { type: string }
+        macAddress: { type: string }
+        notes: { type: string }
+        ip: { type: string }
+        ipAddress: { type: string }
+        vlan: { type: string }
+        criticality: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL], default: MEDIUM }
+        status: { $ref: '#/components/schemas/AssetLifecycleStatus' }
+        lifecycleStatus: { $ref: '#/components/schemas/AssetLifecycleStatus' }
+      anyOf:
+        - required: [assetTag, manufacturer, model, serialNumber]
+        - required: [assetTag, manufacturer, model, serial]
+        - required: [assetTag, brand, model, serialNumber]
+        - required: [assetTag, brand, model, serial]
+        - required: [tag, manufacturer, model, serialNumber]
+        - required: [tag, manufacturer, model, serial]
+        - required: [tag, brand, model, serialNumber]
+        - required: [tag, brand, model, serial]
+      additionalProperties: true
 
     AssetPatchInput:
       type: object
-      description: Payload cập nhật một phần — chỉ gửi các trường cần thay đổi
+      description: >-
+        Payload cập nhật một phần — chỉ gửi các trường cần thay đổi. Runtime chấp
+        nhận cả tên canonical lẫn alias legacy. Payload rỗng bị từ chối với 400
+        trước khi ghi audit hay thay đổi dữ liệu. Payload chỉ chứa trường lạ —
+        không trường nào nằm trong `properties` — cũng bị từ chối với 400, nên
+        `anyOf` yêu cầu tối thiểu một trường đã biết. `additionalProperties` vẫn
+        là `true` vì runtime bỏ qua trường lạ đi kèm một trường đã biết.
+      minProperties: 1
       properties:
-        tag:
-          type: string
-        type:
-          type: string
-        brand:
-          type: string
-        model:
-          type: string
-        serial:
-          type: string
-        assignedTo:
-          type: string
-        dept:
-          type: string
-        status:
-          $ref: '#/components/schemas/AssetStatus'
-        ip:
-          type: string
+        assetTag: { type: string, description: Alias canonical của `tag` }
+        assetType: { type: string, description: Alias canonical của `type` }
+        manufacturer: { type: string, description: Alias canonical của `brand` }
+        serialNumber: { type: string, description: Alias canonical của `serial` }
+        employee: { type: string, description: Alias của `assignedTo` }
+        tag: { type: string, description: Alias legacy của `assetTag` }
+        type: { type: string, description: Alias legacy của `assetType` }
+        brand: { type: string, description: Alias legacy của `manufacturer` }
+        serial: { type: string, description: Alias legacy của `serialNumber` }
+        assignedTo: { type: string }
+        model: { type: string }
+        dept: { type: string }
+        businessArea: { type: string }
+        location: { type: string }
+        hostname: { type: string }
+        macAddress: { type: string }
+        notes: { type: string }
+        criticality: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        status: { $ref: '#/components/schemas/AssetLifecycleStatus' }
+        lifecycleStatus: { $ref: '#/components/schemas/AssetLifecycleStatus' }
+        ip: { type: string }
+        ipAddress: { type: string }
+        vlan: { type: string }
+      anyOf:
+        - required: [assetTag]
+        - required: [assetType]
+        - required: [manufacturer]
+        - required: [serialNumber]
+        - required: [employee]
+        - required: [tag]
+        - required: [type]
+        - required: [brand]
+        - required: [serial]
+        - required: [assignedTo]
+        - required: [model]
+        - required: [dept]
+        - required: [businessArea]
+        - required: [location]
+        - required: [hostname]
+        - required: [macAddress]
+        - required: [notes]
+        - required: [criticality]
+        - required: [status]
+        - required: [lifecycleStatus]
+        - required: [ip]
+        - required: [ipAddress]
+        - required: [vlan]
+      additionalProperties: true
 
     Ticket:
       type: object
@@ -1510,6 +1850,10 @@ components:
       description: Payload tạo ticket mới
       required: [title, requester]
       properties:
+        description:
+          type: string
+          description: Mô tả chi tiết yêu cầu / sự cố
+          example: Không phân giải được DNS sau khi đổi Wi-Fi
         title:
           type: string
           example: Cannot resolve DNS after changing Wi-Fi
@@ -1525,6 +1869,137 @@ components:
         category:
           type: string
           default: General
+
+    MiniERPIncident:
+      type: object
+      description: Ticket sinh ra từ incident MiniERP (idempotent theo externalRef)
+      required: [id, title, source, externalRef, status]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        source: { type: string, example: MINIERP }
+        externalRef: { type: string }
+        status: { $ref: '#/components/schemas/TicketStatus' }
+        state: { type: string, example: NEW }
+        priority: { $ref: '#/components/schemas/Priority' }
+        idempotent: { type: boolean, description: true khi payload trùng externalRef }
+
+    TicketStatusUpdateInput:
+      type: object
+      description: >-
+        Payload đổi trạng thái ticket qua endpoint tương thích. `status` KHÔNG
+        bắt buộc: khi bỏ trống runtime mặc định sang `Resolved`, đúng như mô tả
+        của operation. `required` không được chứa `status`, nếu không một trình
+        kiểm tra OpenAPI sẽ từ chối chính request mặc định đó.
+      properties:
+        status:
+          $ref: '#/components/schemas/TicketStatus'
+        note:
+          type: string
+          description: Ghi chú kèm theo lần đổi trạng thái; được lưu vào ticket, timeline và audit
+          example: Đã liên hệ nhà cung cấp, chờ tái kiểm tra
+      additionalProperties: true
+
+    MiniERPIncidentInput:
+      type: object
+      description: Payload incident idempotent từ MiniERP
+      required: [externalRef, title]
+      properties:
+        externalRef: { type: string, example: ERP-2026-0001 }
+        source: { type: string, enum: [MINIERP], default: MINIERP }
+        title: { type: string, example: ERP transaction failed }
+        description: { type: string }
+        severity: { type: string, enum: [LOW, MEDIUM, HIGH, CRITICAL] }
+        service: { type: string, example: MiniERP }
+        referenceType: { type: string }
+        referenceNo: { type: string }
+        correlationId: { type: string }
+      additionalProperties: true
+
+    MonitoringCheck:
+      type: object
+      description: Một monitoring check kèm trạng thái probe gần nhất
+      required: [id, name, type, target, status]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string, enum: [HTTP, TCP, DNS] }
+        target: { type: string }
+        port: { type: integer, nullable: true }
+        status: { type: string, enum: [UP, DOWN, DEGRADED, UNKNOWN] }
+        consecutiveFailures: { type: integer }
+        failureThreshold: { type: integer }
+        businessService: { type: string }
+        criticality: { type: string }
+        enabled: { type: boolean }
+        lastCheckedAt: { type: string, format: date-time, nullable: true }
+        lastMessage: { type: string, nullable: true }
+        activeIncidentId: { type: integer, nullable: true }
+
+    MonitoringCheckList:
+      type: array
+      description: Danh sách monitoring check kèm trạng thái probe
+      items:
+        $ref: '#/components/schemas/MonitoringCheck'
+
+    MonitoringHistoryEntry:
+      type: object
+      description: Một lần probe đã ghi vào lịch sử
+      required: [id, checkId, at, status]
+      properties:
+        id: { type: integer }
+        checkId: { type: integer }
+        at: { type: string }
+        status: { type: string, enum: [UP, DOWN, DEGRADED] }
+        message: { type: string, nullable: true }
+        consecutiveFailures: { type: integer }
+        correlationId: { type: integer, nullable: true }
+
+    MonitoringHistoryPage:
+      type: object
+      description: Trang lịch sử probe
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitoringHistoryEntry'
+        count: { type: integer }
+
+    MonitoringRunResult:
+      type: object
+      description: Kết quả một lần chạy probe
+      required: [check, history]
+      properties:
+        check:
+          $ref: '#/components/schemas/MonitoringCheck'
+        history:
+          $ref: '#/components/schemas/MonitoringHistoryEntry'
+
+    MonitoringStatus:
+      type: object
+      description: Tổng hợp monitoring cho UI
+      required: [checks, up, down, degraded]
+      properties:
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitoringCheck'
+        up: { type: integer }
+        down: { type: integer }
+        degraded: { type: integer }
+
+    AuditEventList:
+      type: object
+      description: Trang audit event
+      required: [items, count]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        count: { type: integer }
 
     License:
       type: object
@@ -1587,6 +2062,14 @@ components:
         host:
           type: string
           example: it-portal
+        authMode:
+          type: string
+          description: >-
+            Chế độ xác thực đang chạy. `legacy` = mọi endpoint mở (demo nội bộ);
+            `lab` = mọi endpoint ngoài /api/health và /api/auth/login yêu cầu
+            `Authorization: Bearer <token>` lấy từ POST /api/auth/login.
+          enum: [legacy, lab]
+          example: legacy
         counts:
           type: object
           description: Số bản ghi hiện có trong db.json
@@ -1752,13 +2235,13 @@ components:
 
     AiStatus:
       type: object
-      description: Trạng thái trợ lý AI (LLM local qua Ollama)
+      description: Trạng thái trợ lý AI (OpenAI tuỳ chọn, Ollama local hoặc playbook offline)
       required: [engine, reachable, url, model, checkedAt]
       properties:
         engine:
           type: string
-          description: '`ollama` = đang dùng LLM local; `rule-based` = playbook offline'
-          enum: [ollama, rule-based]
+          description: '`openai` = cloud provider; `ollama` = LLM local; `rule-based` = playbook offline'
+          enum: [openai, ollama, rule-based]
           example: rule-based
         reachable:
           type: boolean
@@ -1858,6 +2341,115 @@ components:
         generatedAt:
           type: string
           example: '2026-09-23 14:10'
+
+    AgentRun:
+      type: object
+      description: |
+        Kết quả một lượt chạy của agent. `status` cho biết vòng lặp dừng ở
+        đâu: `answered` (đã có câu trả lời), `needs_approval` (agent đề xuất
+        hành động ghi, chờ người duyệt), `needs_clarification` (input không hợp
+        lệ) hoặc `blocked` (guardrail chặn prompt-injection).
+      required: [status, answer, grounded, trace, proposedAction, memory]
+      properties:
+        status:
+          type: string
+          enum: [answered, needs_approval, needs_clarification, blocked]
+          example: needs_approval
+        answer:
+          type: string
+          description: Câu trả lời tiếng Việt (đã lọc secret, cắt độ dài)
+          example: 'Máy in phòng kế toán kẹt giấy. Bước 1: mở nắp sau...'
+        grounded:
+          type: boolean
+          description: Câu trả lời có căn cứ từ tool/knowledge base hay không
+          example: true
+        evidenceCount:
+          type: integer
+          description: Số lần gọi tool thành công trong vòng lặp
+          example: 2
+        trace:
+          type: array
+          description: Nhật ký từng bước PLAN/ACT — dùng để audit vì sao agent trả lời vậy
+          items:
+            type: object
+            properties:
+              step: { type: integer, example: 0 }
+              phase:
+                type: string
+                enum: [input_guard, plan, act]
+                example: plan
+              tool: { type: string, nullable: true, example: search_tickets }
+              ok: { type: boolean, example: true }
+              engine: { type: string, example: llm }
+        proposedAction:
+          type: object
+          nullable: true
+          description: |
+            Chỉ có khi `status = needs_approval`. **Hành động này chưa được thực
+            thi** — gửi `token` tới `POST /api/ai/agent/approve` để người dùng
+            duyệt mới ghi dữ liệu thật.
+          properties:
+            token: { type: string, example: act_m1x2y3_ab12cd34 }
+            tool: { type: string, example: create_ticket }
+            args: { type: object }
+            reason: { type: string, example: 'Người dùng yêu cầu tạo ticket.' }
+            expiresAt: { type: string, example: '2026-09-23T14:25:00.000Z' }
+        memory:
+          type: object
+          description: Báo cáo bộ nhớ sau lượt này
+          properties:
+            learned:
+              type: array
+              description: Ký ức dài hạn được học từ lời người dùng (chỉ tự khai rõ)
+              items: { type: string }
+              example: ['Tôi tên là Mai']
+            recalled: { type: integer, example: 1 }
+
+    AgentStatus:
+      type: object
+      description: Năng lực agent đang chạy (engine, tool registry, bộ nhớ)
+      required: [engine, tiers, maxSteps, tools, sideEffectPolicy, memory, pendingApprovals]
+      properties:
+        engine:
+          type: string
+          description: '`rule-based` khi không có LLM nào trả lời được; còn lại là tên engine đang dùng'
+          example: rule-based
+        tiers:
+          type: array
+          description: Chuỗi LLM dự phòng theo thứ tự ưu tiên
+          items: { type: string }
+          example: ['ollama']
+        maxSteps:
+          type: integer
+          description: Số bước tối đa mỗi lượt trong vòng lặp PLAN→ACT→OBSERVE
+          example: 4
+        tools:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string, example: create_ticket }
+              sideEffect:
+                type: boolean
+                description: Tool ghi dữ liệu thật → bắt buộc có người duyệt
+                example: true
+              autoAllowed:
+                type: boolean
+                description: Tool được phép tự chạy trong vòng lặp (luôn false cho tool ghi)
+                example: false
+        sideEffectPolicy:
+          type: string
+          example: 'side-effect tools require explicit human approval; agent can only propose'
+        memory:
+          type: object
+          properties:
+            sessions: { type: integer, example: 2 }
+            longTerm: { type: integer, example: 3 }
+            ltmEnabled: { type: boolean, example: true }
+        pendingApprovals:
+          type: integer
+          description: Số hành động đang chờ người dùng duyệt
+          example: 1
 
 
   securitySchemes:

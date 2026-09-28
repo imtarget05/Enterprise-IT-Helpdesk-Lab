@@ -1,0 +1,66 @@
+# ── Enterprise IT Helpdesk Lab — internal-portal Render free-tier blueprint ──
+# Single free web service (node:20-alpine docker, region frankfurt).
+# Deploy: Render → New → Blueprint → connect this repo, blueprint file:
+#   internal-portal/render.yaml
+# then fill sync:false secrets in the Render Dashboard (never commit values).
+#
+# 512MB RAM RATIONALE (Render free plan = 512MB):
+#   - Single node process (`node server.js`, no cluster/workers) — the Compose
+#     profile already caps the portal at 256MB (MEM_LIMIT) so one free Render
+#     instance is ample.
+#   - No Qdrant sidecar on Render: QDRANT_URL left unset → the app falls back
+#     to its InMemory RAG store (same behaviour as `docker compose up it-portal`
+#     without the qdrant service). Point QDRANT_URL at Qdrant Cloud free tier
+#     only if runbook RAG persistence is needed.
+#   - JSON-file storage (DATA_DIR) is ephemeral on free tier (no disk) —
+#     suitable for demo; point to a hosted DB before any real use.
+#
+# python-portal (Flask, internal-portal/python-portal/app.py) is DEMO-ONLY and
+# intentionally has NO Render service here: it has no auth (all write routes
+# are open, CORS wide open) and binds loopback by design (HOST defaults to
+# 127.0.0.1). Exposing it to the public internet would publish an
+# unauthenticated write API. It stays localhost-only for JD walkthroughs.
+# The public free-tier surface is the Node portal below (AUTH_MODE=lab gives
+# real Bearer/RBAC login; legacy mode is still demo-grade — prefer lab).
+services:
+  - type: web
+    name: helpdesk-portal
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./internal-portal/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    # Secrets on the Render dashboard (Settings → Environment), NOT in git:
+    #   AUTH_MODE              = lab (real login) — set LAB_AUTH_USERS JSON too
+    #   LAB_AUTH_USERS         = <JSON user list for lab mode>
+    #   MINIERP_INTEGRATION_KEY= <key for POST /api/integrations/minierp/incidents>
+    #   OPENAI_API_KEY         = <optional AI tier>
+    #   OLLAMA_URL / MODEL     = <unreachable from Render cloud — leave unset>
+    #   QDRANT_URL             = <optional Qdrant Cloud URL; unset = InMemory>
+    #   ALLOWED_ORIGINS        = <comma-separated; default *>
+    #   IT_WEBHOOK_URL         = <optional alert webhook; unset = mock log>
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # PORT is injected by Render at runtime ($PORT) and honoured by
+      # server.js (Number(process.env.PORT) || 3000) — do NOT hardcode it here.
+      - key: AUTH_MODE
+        value: lab
+      - key: DATA_DIR
+        value: /app/data
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: LAB_AUTH_USERS
+        sync: false
+      - key: MINIERP_INTEGRATION_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: IT_WEBHOOK_URL
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_COLLECTION
+        value: it_helpdesk_runbooks

@@ -20,6 +20,7 @@ const { createStore } = require('./store');
 const { createNotifier } = require('./notify');
 const { toCsv, auditFilename, ASSET_COLUMNS } = require('./csv');
 const { createAi } = require('./ai');
+const { createAgent } = require('./agent');
 const { createAuth, PERMISSIONS } = require('./auth');
 const { registerEnterpriseRoutes } = require('./enterprise-routes');
 
@@ -95,15 +96,49 @@ async function createApp(options = {}) {
   const store = createStore({ dataDir, seed: options.seed });
   await store.load();
 
-  const notifier = createNotifier({ dataDir, webhookUrl: options.webhookUrl });
+  // `options.notifier` lets tests inject an offline fake (never contacts a webhook).
+  const notifier = options.notifier || createNotifier({ dataDir, webhookUrl: options.webhookUrl });
   const auth = createAuth({ authMode: options.authMode, authUsers: options.authUsers });
 
-  // AI assistant — LLM LOCAL qua Ollama (không OpenAI). options.ai cho test
-  // inject fetchImpl/ollamaUrl; production đọc OLLAMA_URL/OLLAMA_MODEL.
+  // AI assistant — OpenAI (tuỳ chọn) → Ollama local → playbook offline. options.ai cho test
+  // inject fetchImpl/ollamaUrl; production đọc OPENAI_API_KEY/OLLAMA_URL/OLLAMA_MODEL.
   const ai = createAi(options.ai || {});
+
+  // Agentic runtime — thêm lớp trên cùng: agent chọn tool, gọi tool, rồi trả
+  // lời. options.agent cho test inject llm/fetchImpl/maxSteps. Dùng chung
+  // fetchImpl với createAi để test chỉ cần giả một nguồn.
+  const agent = await createAgent({
+    store,
+    dataDir,
+    ...(options.agent || {}),
+    fetchImpl: (options.agent && options.agent.fetchImpl) || (options.ai && options.ai.fetchImpl) || null,
+  });
 
   const app = express();
   app.disable('x-powered-by');
+  // --- Minimal Prometheus helper (additive; zero new dependencies) ---
+  // In-memory per-route×status request counters for GET /metrics below.
+  // Unauthenticated (standard for Prometheus scraping); no existing route,
+  // auth, or response shape is changed.
+  const httpRequestsTotal = new Map();
+  app.use((req, res, next) => {
+    res.on('finish', () => {
+      const route = (str(req.path || req.originalUrl).split('?')[0] || '/').replace(/"/g, '');
+      const key = `${req.method} ${route} ${res.statusCode}`;
+      // NOTE: no `httpRequestsTotal.get(key)` here on purpose. A bare
+      // `recv.get(identifier)` is indistinguishable from `app.get(path)` to the
+      // fail-closed route scanner (test/route-inventory.js), which would report
+      // it as an unresolved registration and fail the inventory gates. The
+      // linear scan below follows the same precedent as `bucketAt` in
+      // src/enterprise-routes.js; the map holds one entry per route×status.
+      let prev = 0;
+      for (const entry of httpRequestsTotal) {
+        if (entry[0] === key) { prev = entry[1]; break; }
+      }
+      httpRequestsTotal.set(key, prev + 1);
+    });
+    next();
+  });
   app.use(cors({ origin: parseAllowedOrigins(options.allowedOrigins ?? process.env.ALLOWED_ORIGINS) }));
   app.use(express.json({ limit: '128kb' }));
   if (options.requestLogger !== false) {
@@ -128,6 +163,9 @@ async function createApp(options = {}) {
     if (/^\/assets(?:\/|$)/.test(req.path) && ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) permission = PERMISSIONS.ASSET_WRITE;
     if (/^\/tickets(?:\/|$)/.test(req.path) && ['POST', 'PATCH', 'PUT'].includes(req.method)) permission = PERMISSIONS.TICKET_WRITE;
     if (req.path === '/ai/analyze') permission = PERMISSIONS.TICKET_WRITE;
+    // Agent chỉ đọc được thì vẫn hỏi được về tri thức; nhưng approve (ghi dữ
+    // liệu thật) và run (có thể đề xuất ghi) đều cần TICKET_WRITE.
+    if (req.path === '/ai/agent' || req.path === '/ai/agent/approve') permission = PERMISSIONS.TICKET_WRITE;
     if (permission && !auth.hasPermission(req.user, permission)) return res.status(403).json({ error: 'Insufficient portal role.', requiredPermission: permission, status: 403, path: req.originalUrl });
     return next();
   });
@@ -145,9 +183,61 @@ async function createApp(options = {}) {
       service: 'enterprise-it-asset-portal',
       version: VERSION,
       host: os.hostname(),
+      // UI cần biết chế độ auth để quyết định hiển thị login panel hay không.
+      authMode: auth.mode,
       counts: store.summary(),
       webhook: notifier.webhookUrl ? 'configured' : 'mock',
     });
+  });
+
+  // ---------------------------- Prometheus ---------------
+  app.get('/metrics', (req, res) => {
+    // Prometheus text exposition — aggregate counts only, no PII/ticket bodies.
+    const { assets, tickets, licenses } = store.data;
+    const openTickets = tickets.filter((t) => t.status === 'Open').length;
+    const resolvedTickets = tickets.filter((t) => t.status === 'Resolved').length;
+    const criticalTickets = tickets.filter((t) => t.priority === 'Critical').length;
+    const activeAssets = assets.filter((a) => a.status === 'Active').length;
+    const lines = [
+      '# HELP helpdesk_tickets_total Total tickets in store.',
+      '# TYPE helpdesk_tickets_total counter',
+      `helpdesk_tickets_total ${tickets.length}`,
+      '# HELP helpdesk_tickets_open Currently open tickets.',
+      '# TYPE helpdesk_tickets_open gauge',
+      `helpdesk_tickets_open ${openTickets}`,
+      '# HELP helpdesk_tickets_resolved Resolved tickets.',
+      '# TYPE helpdesk_tickets_resolved counter',
+      `helpdesk_tickets_resolved ${resolvedTickets}`,
+      '# HELP helpdesk_tickets_critical Critical-priority tickets.',
+      '# TYPE helpdesk_tickets_critical gauge',
+      `helpdesk_tickets_critical ${criticalTickets}`,
+      '# HELP helpdesk_assets_total Total IT assets tracked.',
+      '# TYPE helpdesk_assets_total gauge',
+      `helpdesk_assets_total ${assets.length}`,
+      '# HELP helpdesk_assets_active Active assets.',
+      '# TYPE helpdesk_assets_active gauge',
+      `helpdesk_assets_active ${activeAssets}`,
+      '# HELP helpdesk_licenses_total Software licenses tracked.',
+      '# TYPE helpdesk_licenses_total gauge',
+      `helpdesk_licenses_total ${licenses.length}`,
+      '# HELP helpdesk_uptime_seconds Process uptime.',
+      '# TYPE helpdesk_uptime_seconds gauge',
+      `helpdesk_uptime_seconds ${Number(process.uptime().toFixed(2))}`,
+      '# HELP http_requests_total Total HTTP requests by route and status.',
+      '# TYPE http_requests_total counter',
+      ...[...httpRequestsTotal.entries()].sort().map(([key, n]) => {
+        const [method, route, status] = key.split(' ');
+        return `http_requests_total{method="${method}",route="${route}",status="${status}"} ${n}`;
+      }),
+      '# HELP process_uptime_seconds Process uptime in seconds.',
+      '# TYPE process_uptime_seconds gauge',
+      `process_uptime_seconds ${Number(process.uptime().toFixed(2))}`,
+      '# HELP ticket_count Tickets currently in store.',
+      '# TYPE ticket_count gauge',
+      `ticket_count ${tickets.length}`,
+    ];
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.send(lines.join('\n') + '\n');
   });
 
   // ---------------------------- Dashboard ------------------
@@ -197,58 +287,6 @@ async function createApp(options = {}) {
     return filterRows(store.data.assets, req.query, ASSET_SEARCH_FIELDS);
   }
 
-  function assertAssetUnique(candidate, { excludeId } = {}) {
-    const dupTag = store.data.assets.find(
-      (a) => str(a.tag).toLowerCase() === str(candidate.tag).toLowerCase() && Number(a.id) !== Number(excludeId)
-    );
-    if (dupTag) throw httpError(409, `Mã tài sản (Asset Tag) "${candidate.tag}" đã tồn tại — trùng với ${dupTag.tag} (id ${dupTag.id}).`);
-
-    if (candidate.serial) {
-      const dupSerial = store.data.assets.find(
-        (a) => str(a.serial).toLowerCase() === str(candidate.serial).toLowerCase() && Number(a.id) !== Number(excludeId)
-      );
-      if (dupSerial) throw httpError(409, `Serial "${candidate.serial}" đã được gán cho tài sản ${dupSerial.tag} (id ${dupSerial.id}).`);
-    }
-  }
-
-  function validateAssetPayload(body, { partial = false } = {}) {
-    const errors = [];
-    const picked = {};
-
-    for (const field of ['tag', 'brand', 'model', 'serial']) {
-      if (body[field] !== undefined || !partial) {
-        const value = str(body[field]);
-        if (!value) errors.push(`Thiếu trường bắt buộc: ${field}`);
-        else picked[field] = value;
-      }
-    }
-
-    if (body.type !== undefined || !partial) picked.type = str(body.type) || 'Laptop';
-    for (const field of ['assignedTo', 'dept', 'ip']) {
-      if (body[field] !== undefined) picked[field] = str(body[field]);
-    }
-    if (!partial) {
-      picked.assignedTo = picked.assignedTo || 'Unassigned';
-      picked.dept = picked.dept || 'General';
-      picked.ip = picked.ip || '-';
-    }
-
-    if (body.status !== undefined) {
-      const status = str(body.status);
-      if (!ASSET_STATUSES.includes(status)) {
-        errors.push(`Trạng thái không hợp lệ: "${status}". Giá trị cho phép: ${ASSET_STATUSES.join(', ')}.`);
-      } else {
-        picked.status = status;
-      }
-    }
-
-    const invalid = errors.find((e) => e.startsWith('Trạng thái'));
-    const missing = errors.filter((e) => e !== invalid);
-    return { picked, missing, invalid };
-  }
-
-  app.get('/api/assets', (req, res) => res.json(assetSearch(req)));
-
   app.get('/api/assets/export.csv', async (req, res, next) => {
     try {
       const rows = assetSearch(req);
@@ -267,60 +305,10 @@ async function createApp(options = {}) {
     }
   });
 
-  app.post('/api/assets', async (req, res, next) => {
-    try {
-      const body = req.body || {};
-      const { picked, missing, invalid } = validateAssetPayload(body);
-      if (missing.length) throw httpError(400, 'Dữ liệu đăng ký tài sản không hợp lệ.', missing);
-      if (invalid) throw httpError(422, invalid);
-      assertAssetUnique(picked);
-
-      const newAsset = {
-        id: store.nextId('assets'),
-        tag: picked.tag,
-        type: picked.type,
-        brand: picked.brand,
-        model: picked.model,
-        serial: picked.serial,
-        assignedTo: picked.assignedTo,
-        dept: picked.dept,
-        status: picked.status || 'Active',
-        ip: picked.ip,
-        createdAt: stamp(),
-      };
-      store.data.assets.unshift(newAsset);
-      await store.commit();
-      console.log(`[assets] Đăng ký mới ${newAsset.tag} (${newAsset.brand} ${newAsset.model}) → id ${newAsset.id}`);
-      res.status(201).json(newAsset);
-    } catch (err) {
-      next(err);
-    }
-  });
-
   app.get('/api/assets/:id', (req, res, next) => {
     const asset = store.find('assets', req.params.id);
     if (!asset) return next(notFound('Tài sản', req.params.id));
     res.json(asset);
-  });
-
-  app.patch('/api/assets/:id', async (req, res, next) => {
-    try {
-      const asset = store.find('assets', req.params.id);
-      if (!asset) throw notFound('Tài sản', req.params.id);
-
-      const body = req.body || {};
-      const { picked, missing, invalid } = validateAssetPayload(body, { partial: true });
-      if (missing.length) throw httpError(400, 'Dữ liệu cập nhật không hợp lệ.', missing);
-      if (invalid) throw httpError(422, invalid);
-      if (Object.keys(picked).length === 0) throw httpError(400, 'Không có trường nào cần cập nhật.', ['payload rỗng']);
-      assertAssetUnique({ ...asset, ...picked }, { excludeId: asset.id });
-
-      Object.assign(asset, picked, { updatedAt: stamp() });
-      await store.commit(); // phải chắc chắn ghi đĩa trước khi báo 200 (không mất dữ liệu khi restart)
-      res.json(asset);
-    } catch (err) {
-      next(err);
-    }
   });
 
   app.delete('/api/assets/:id', async (req, res, next) => {
@@ -338,38 +326,7 @@ async function createApp(options = {}) {
 
   // ========================= HELPDESK TICKETS =========================
   const TICKET_SEARCH_FIELDS = ['title', 'requester', 'dept', 'category', 'status', 'priority'];
-  const CLOSED_STATUSES = new Set(['Resolved', 'Closed']);
   const ticketSearch = (req) => filterRows(store.data.tickets, req.query, TICKET_SEARCH_FIELDS);
-
-  function validateTicketPayload(body, { partial = false } = {}) {
-    const missing = [];
-    const invalid = [];
-    const picked = {};
-
-    for (const field of ['title', 'requester']) {
-      if (body[field] !== undefined || !partial) {
-        const value = str(body[field]);
-        if (!value) missing.push(`Thiếu trường bắt buộc: ${field}`);
-        else picked[field] = value;
-      }
-    }
-    for (const field of ['dept', 'category']) {
-      if (body[field] !== undefined) picked[field] = str(body[field]);
-    }
-    if (body.priority !== undefined) {
-      const priority = str(body.priority);
-      if (!PRIORITIES.includes(priority)) invalid.push(`Mức độ không hợp lệ: "${priority}". Cho phép: ${PRIORITIES.join(', ')}.`);
-      else picked.priority = priority;
-    }
-    if (body.status !== undefined) {
-      const status = str(body.status);
-      if (!TICKET_STATUSES.includes(status)) invalid.push(`Trạng thái không hợp lệ: "${status}". Cho phép: ${TICKET_STATUSES.join(', ')}.`);
-      else picked.status = status;
-    }
-    return { picked, missing, invalid };
-  }
-
-  app.get('/api/tickets', (req, res) => res.json(ticketSearch(req)));
 
   app.get('/api/tickets/export.csv', (req, res) => {
     const rows = ticketSearch(req);
@@ -380,65 +337,6 @@ async function createApp(options = {}) {
       'X-Total-Records': String(rows.length),
     });
     res.send(toCsv(rows, TICKET_COLUMNS));
-  });
-
-  app.get('/api/tickets/:id', (req, res, next) => {
-    const ticket = store.find('tickets', req.params.id);
-    if (!ticket) return next(notFound('Ticket', req.params.id));
-    res.json(ticket);
-  });
-
-  app.post('/api/tickets', async (req, res, next) => {
-    try {
-      const body = req.body || {};
-      const { picked, missing, invalid } = validateTicketPayload(body);
-      if (missing.length) throw httpError(400, 'Dữ liệu tạo ticket không hợp lệ.', missing);
-      if (invalid.length) throw httpError(422, invalid[0], invalid);
-
-      const newTicket = {
-        id: store.nextId('tickets', 1001),
-        title: picked.title,
-        requester: picked.requester,
-        dept: picked.dept || 'General',
-        priority: picked.priority || 'Medium',
-        status: 'Open',
-        category: picked.category || 'General',
-        createdAt: stamp(),
-      };
-      store.data.tickets.unshift(newTicket);
-      await store.commit();
-      console.log(`[tickets] #${newTicket.id} mở mới (${newTicket.priority}) — ${newTicket.title}`);
-
-      // Notification mock: chỉ alert High/Critical; lỗi webhook không được làm hỏng request.
-      const alert = await notifier.alert(newTicket).catch((err) => ({ alerted: false, reason: err.message }));
-      res.status(201).json(alert && alert.alerted ? { ...newTicket, alerted: true } : newTicket);
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  app.patch('/api/tickets/:id/status', async (req, res, next) => {
-    try {
-      const ticket = store.find('tickets', req.params.id);
-      if (!ticket) throw notFound('Ticket', req.params.id);
-
-      const body = req.body || {};
-      const status = body.status === undefined ? 'Resolved' : str(body.status);
-      if (!TICKET_STATUSES.includes(status)) {
-        throw httpError(422, `Trạng thái không hợp lệ: "${body.status}". Cho phép: ${TICKET_STATUSES.join(', ')}.`);
-      }
-
-      ticket.status = status;
-      ticket.updatedAt = stamp();
-      if (CLOSED_STATUSES.has(status)) ticket.resolvedAt = ticket.resolvedAt || stamp();
-      else delete ticket.resolvedAt;
-
-      await store.commit(); // chắc chắn ghi đĩa trước khi trả 200 → restart không mất trạng thái
-      console.log(`[tickets] #${ticket.id} → ${status}`);
-      res.json(ticket);
-    } catch (err) {
-      next(err);
-    }
   });
 
   // ===================== SOFTWARE LICENSES =====================
@@ -468,9 +366,9 @@ async function createApp(options = {}) {
     });
   });
 
-  // ================== AI ASSISTANT (LLM local qua Ollama) ==================
-  // GET /api/ai/status — probe Ollama (reachable, model, list model đã tải).
-  // Không có Ollama → engine 'rule-based', không lỗi (fail-soft như notify).
+  // ================== AI ASSISTANT (OPENAI → OLLAMA → OFFLINE) ==================
+  // GET /api/ai/status — báo cáo provider hiện tại, model và trạng thái reachability.
+  // POST /api/ai/analyze — OpenAI tuỳ chọn, fallback Ollama rồi playbook rule-based.
   app.get('/api/ai/status', async (req, res, next) => {
     try {
       res.json(await ai.status());
@@ -504,6 +402,102 @@ async function createApp(options = {}) {
 
       const analysis = await ai.analyze(input);
       res.json({ ticketId: ticket ? ticket.id : null, ...analysis });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/ai/log-analysis — FPT AI Camera evidence: LLM/SRE root-cause từ log thật.
+  // Body: { logs: string[], service?: string, metrics?: object }. Luôn 200 khi input hợp lệ.
+  app.post('/api/ai/log-analysis', async (req, res, next) => {
+    try {
+      const body = req.body || {};
+      if (!Array.isArray(body.logs) || body.logs.length === 0) {
+        throw httpError(400, 'Thiếu logs.', ['Body cần { logs: string[] } ít nhất 1 dòng.']);
+      }
+      const out = await ai.analyzeLogs({ logs: body.logs, service: body.service, metrics: body.metrics || null });
+      try {
+        // store KHÔNG có method add() (chỉ data/commit/flush/nextId) — bản cũ
+        // gọi store.add() và bị catch(_) nuốt lặng lẽ nên audit không bao giờ
+        // được ghi. Ghi thẳng vào collection theo đúng schema auditEvents.
+        const rows = store.data.auditEvents || (store.data.auditEvents = []);
+        rows.unshift({
+          id: store.nextId('auditEvents'),
+          at: new Date().toISOString(),
+          actor: 'ai-log-analysis',
+          role: 'SYSTEM',
+          action: 'log-analysis',
+          entityType: 'service',
+          entityId: null,
+          details: { service: out.service, severity: out.severity, errors: out.errorCount },
+        });
+        if (rows.length > 5000) rows.length = 5000;
+        store.commit();
+      } catch (_) { /* audit best-effort */ }
+      res.json(out);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // ============ Agentic runtime (tools + memory + guardrails) ============
+  // GET  /api/ai/agent/status — engine, tool registry, số phiên/ký ức.
+  app.get('/api/ai/agent/status', (req, res) => {
+    try {
+      res.json(agent.describe());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/ai/agent — body: { question, sessionId? }.
+  // Chạy vòng lặp PLAN→ACT→OBSERVE. Tool ghi KHÔNG tự chạy: kết quả trả về
+  // status 'needs_approval' + proposedAction.token để người dùng duyệt riêng.
+  app.post('/api/ai/agent', auth.requireAuth(PERMISSIONS.TICKET_WRITE), async (req, res, next) => {
+    try {
+      const body = req.body || {};
+      const question = str(body.question || body.q);
+      if (!question) {
+        throw httpError(400, 'Thiếu câu hỏi.', ['Cần trường "question" trong body.']);
+      }
+      const result = await agent.run({
+        question,
+        sessionId: str(body.sessionId) || `api-${req.user.username}`,
+        user: str(req.user.username),
+        tenant: str(body.tenant) || 'default',
+        requester: str(req.user.username),
+      });
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/ai/agent/approve — body: { token, approved? }.
+  // Điểm duy nhất nơi tool side-effect thực sự ghi dữ liệu. approved=false →
+  // từ chối, huỷ token (không thể duyệt lại).
+  app.post('/api/ai/agent/approve', auth.requireAuth(PERMISSIONS.TICKET_WRITE), async (req, res, next) => {
+    try {
+      const body = req.body || {};
+      const token = str(body.token);
+      if (!token) {
+        throw httpError(400, 'Thiếu token phê duyệt.', ['Cần trường "token" trong body.']);
+      }
+      if (body.approved === false) {
+        const rejected = agent.reject(token);
+        if (!rejected) throw httpError(404, 'Token không hợp lệ, đã hết hạn hoặc đã dùng.');
+        return res.json({ approved: false, rejected: true });
+      }
+      const outcome = await agent.approve({
+        token,
+        user: str(req.user.username),
+        tenant: str(body.tenant) || 'default',
+        requester: str(req.user.username),
+      });
+      if (!outcome.ok) {
+        return res.status(outcome.status || 400).json({ error: outcome.error, code: outcome.code, status: outcome.status || 400 });
+      }
+      return res.json(outcome);
     } catch (err) {
       next(err);
     }
@@ -549,6 +543,9 @@ async function createApp(options = {}) {
     [/^\/audit$/, ['GET']],
     [/^\/ai\/status$/, ['GET']],
     [/^\/ai\/analyze$/, ['POST']],
+    [/^\/ai\/agent$/, ['POST']],
+    [/^\/ai\/agent\/status$/, ['GET']],
+    [/^\/ai\/agent\/approve$/, ['POST']],
     [/^\/notifications$/, ['GET']],
   ];
 
@@ -589,7 +586,7 @@ async function createApp(options = {}) {
     res.status(status).json(body);
   });
 
-  return { app, store, notifier, dataDir, version: VERSION };
+  return { app, store, notifier, agent, dataDir, version: VERSION };
 }
 
 

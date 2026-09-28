@@ -73,6 +73,33 @@ test('ticket timeline/SLA, monitoring dedupe, and MiniERP idempotency work', asy
   } finally { await c.cleanup(); }
 });
 
+test('a long MiniERP external reference replays as one incident (accepted cap == stored cap)', async () => {
+  // Regression: the receiver used to accept 160 chars of externalRef while
+  // createTicket stored 120. A reference above the stored cap was written
+  // truncated, so the replay lookup compared the untruncated value against the
+  // truncated row, never matched, and every replay created a second incident.
+  const c = await open({ requestLogger: false, miniErpIntegrationKey: 'erp-key' });
+  try {
+    const h = { Authorization: 'Bearer erp-key' };
+    const ref = `E2E-LONG-${'y'.repeat(131 - 'E2E-LONG-'.length)}`;
+    assert.equal(ref.length, 131, `fixture must exceed the 120-char stored cap, got ${ref.length}`);
+    const payload = { source: 'MiniERP', externalRef: ref, title: 'Long reference', severity: 'HIGH', description: 'long ref' };
+    const first = await c.json('POST', '/api/integrations/minierp/incidents', payload, h);
+    const replay = await c.json('POST', '/api/integrations/minierp/incidents', payload, h);
+    assert.equal(first.status, 201);
+    assert.equal(first.data.externalRef.length, 120, `the stored reference must sit at the 120-char cap, got ${first.data.externalRef.length}`);
+    assert.equal(replay.status, 200, `a replay of a long reference must be 200, got ${replay.status}`);
+    assert.equal(replay.data.idempotent, true, 'a replay of a long reference must answer idempotent:true');
+    assert.equal(replay.data.id, first.data.id, 'a replay of a long reference returned a different incident id');
+    const stored = (await c.json('GET', '/api/tickets')).data.filter((t) => String(t.externalRef).startsWith('E2E-LONG-'));
+    assert.equal(stored.length, 1, `a 131-char external reference produced ${stored.length} incidents`);
+    // The stored reference is what a later caller must be able to address.
+    const byStoredRef = await c.json('POST', '/api/integrations/minierp/incidents', { ...payload, externalRef: first.data.externalRef }, h);
+    assert.equal(byStoredRef.status, 200);
+    assert.equal(byStoredRef.data.idempotent, true);
+  } finally { await c.cleanup(); }
+});
+
 test('problem/change and access handoff/offboarding workflows are idempotent', async () => {
   const c = await open();
   try {

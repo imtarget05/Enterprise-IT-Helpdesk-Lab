@@ -28,5 +28,10 @@ node_modules/
 !.env.example
 *credentials*.json
 
+# === Python ===
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # === Oracle data (khong bao gio commit) ===
 **/oradata/

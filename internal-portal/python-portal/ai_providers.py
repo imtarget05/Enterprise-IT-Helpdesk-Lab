@@ -2,7 +2,8 @@
 AI Assistant — 3 tầng engine (fail-soft, luôn HTTP 200 khi input hợp lệ):
 
   1. OpenAI cloud (OPENAI_API_KEY) — gpt-4o-mini, response JSON.
-  2. Qwen nhỏ LOCAL qua Ollama — không tốn phí.
+  2. LLM LOCAL: Ollama (mặc định) hoặc endpoint OpenAI-compatible trên LAN
+     (LM Studio / llm-gateway) khi LLM_PROVIDER=lmstudio — không tốn phí.
   3. Playbook rule-based + RAG Qdrant — offline vẫn chạy.
 
 KEY BẢO MẬT: chỉ đọc từ biến môi trường OPENAI_API_KEY (.env, gitignored),
@@ -20,6 +21,12 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:0.5b")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT_MS", "20000")) // 1000 or 20
+
+# Local LAN provider: "ollama" (mặc định) hoặc "lmstudio" (OpenAI-compatible).
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").strip().lower()
+LMSTUDIO_URL = os.environ.get("LMSTUDIO_URL", "http://192.168.1.8:1234/v1").rstrip("/")
+LMSTUDIO_MODEL = os.environ.get("LMSTUDIO_MODEL", "qwen2.5-vl-3b-instruct")
+USE_LMSTUDIO = LLM_PROVIDER in ("lmstudio", "local_openai", "lms")
 
 
 def _openai_key() -> str:
@@ -195,6 +202,36 @@ def _ollama_chat(ticket: dict, timeout: int = TIMEOUT) -> dict:
     return _parse_llm_json(content)
 
 
+def _lmstudio_chat(ticket: dict, timeout: int = TIMEOUT) -> dict:
+    """LLM local qua endpoint OpenAI-compatible (LM Studio / llm-gateway)."""
+    ctx, hits = _rag_context(ticket)
+    _ollama_chat.last_hits = hits
+    user = _build_user(ticket, ctx)
+    payload = json.dumps({
+        "model": LMSTUDIO_MODEL, "temperature": 0.2, "max_tokens": 800,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user},
+        ],
+    }).encode()
+    req = urllib.request.Request(
+        f"{LMSTUDIO_URL}/chat/completions", data=payload, method="POST",
+        headers={"Content-Type": "application/json", "X-Project": "IT-Helpdesk-Lab"})
+    with urllib.request.urlopen(req, timeout=timeout) as res:
+        data = json.loads(res.read().decode())
+    choices = data.get("choices") or []
+    content = (choices[0].get("message") or {}).get("content", "") if choices else ""
+    return _parse_llm_json(content)
+
+
+def _local_chat(ticket: dict) -> tuple[dict, str, str]:
+    """Gọi tầng LLM local đang cấu hình → (analysis, engine, model)."""
+    if USE_LMSTUDIO:
+        return _lmstudio_chat(ticket), "lmstudio", LMSTUDIO_MODEL
+    return _ollama_chat(ticket), "ollama", OLLAMA_MODEL
+
+
 def _rag_hits_of(ticket: dict) -> list:
     return getattr(_ollama_chat, "last_hits", []) or []
 
@@ -203,6 +240,7 @@ def analyze_ticket(ticket: dict) -> dict:
     ctx, hits = _rag_context(ticket)
     _ollama_chat.last_hits = hits
     rag = {"hits": len(hits), "sources": [h.get("source") for h in hits]}
+    local_engine = "lmstudio" if USE_LMSTUDIO else "ollama"
     # Tầng 1: OpenAI cloud (nếu có key).
     if _openai_key():
         try:
@@ -211,25 +249,25 @@ def analyze_ticket(ticket: dict) -> dict:
                     "rag": rag, "playbook": None, **r,
                     "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M")}
         except Exception as e_openai:
-            try:  # Tầng 2: Ollama local.
-                r = _ollama_chat(ticket)
-                out = {"engine": "ollama", "model": OLLAMA_MODEL,
+            try:  # Tầng 2: LLM local (Ollama hoặc LM Studio).
+                r, engine, model = _local_chat(ticket)
+                out = {"engine": engine, "model": model,
                        "rag": rag, "playbook": None, **r,
                        "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M")}
-                out["fallbackReason"] = f"OpenAI lỗi ({e_openai}) → dùng Ollama local"
+                out["fallbackReason"] = f"OpenAI lỗi ({e_openai}) → dùng {engine} local"
                 return out
             except Exception as e2:
-                out = _rag_fallback(ticket, f"OpenAI: {e_openai}; Ollama: {e2}")
+                out = _rag_fallback(ticket, f"OpenAI: {e_openai}; {local_engine}: {e2}")
                 return out
     try:
-        r = _ollama_chat(ticket)
+        r, engine, model = _local_chat(ticket)
         hits = _rag_hits_of(ticket)
-        return {"engine": "ollama", "model": OLLAMA_MODEL,
+        return {"engine": engine, "model": model,
                 "rag": {"hits": len(hits),
                         "sources": [h.get("source") for h in hits]},
                 "playbook": None, **r,
                 "generatedAt": datetime.now().strftime("%Y-%m-%d %H:%M")}
-    except Exception as e:  # fail-soft: Ollama chưa chạy -> RAG rule-based vẫn 200
+    except Exception as e:  # fail-soft: LLM local chưa chạy -> RAG rule-based vẫn 200
         return _rag_fallback(ticket, e)
 
 
@@ -255,17 +293,26 @@ def _rag_fallback(ticket: dict, err) -> dict:
 
 
 def ai_status() -> dict:
-    base = {"model": OLLAMA_MODEL,
+    local_model = LMSTUDIO_MODEL if USE_LMSTUDIO else OLLAMA_MODEL
+    local_url = LMSTUDIO_URL if USE_LMSTUDIO else OLLAMA_URL
+    local_engine = "lmstudio" if USE_LMSTUDIO else "ollama"
+    base = {"model": local_model,
             "openai": {"configured": bool(_openai_key()), "model": OPENAI_MODEL},
             "checkedAt": datetime.now().strftime("%Y-%m-%d %H:%M")}
     try:
-        req = urllib.request.Request(f"{OLLAMA_URL}/api/tags", method="GET")
-        with urllib.request.urlopen(req, timeout=3) as res:
-            data = json.loads(res.read().decode())
-        models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
-        return {"engine": "ollama", "reachable": True, "url": OLLAMA_URL,
+        if USE_LMSTUDIO:
+            req = urllib.request.Request(f"{LMSTUDIO_URL}/models", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as res:
+                data = json.loads(res.read().decode())
+            models = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+        else:
+            req = urllib.request.Request(f"{OLLAMA_URL}/api/tags", method="GET")
+            with urllib.request.urlopen(req, timeout=3) as res:
+                data = json.loads(res.read().decode())
+            models = [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+        return {"engine": local_engine, "reachable": True, "url": local_url,
                 "models": models, "error": None, **base}
     except Exception as e:
         eng = "openai" if _openai_key() else "rule-based"
-        return {"engine": eng, "reachable": False, "url": OLLAMA_URL,
+        return {"engine": eng, "reachable": False, "url": local_url,
                 "models": [], "error": str(e)[:200], **base}

@@ -1,0 +1,72 @@
+# =============================================================================
+#  CI Live — Enterprise IT Helpdesk Lab (MANUAL ONLY)
+#
+#  Trigger: Actions → "CI Live" → Run workflow (workflow_dispatch).
+#  NEVER runs on push/PR: it exercises LIVE paths that need real infra.
+#
+#  What it does:
+#    1. node live-guard — boots the real app factory (src/app.js createApp)
+#       on an ephemeral port and hits /api/health with LIVE_TESTS=1, plus
+#       probes any extra live URLs as SKIP-instead-of-fail when unreachable.
+#       Locally green (node --test test/live-guard.test.js: 3/3 pass).
+#    2. compose healthcheck — `docker compose config` render + optional
+#       `up -d` health probe of the portal service. Needs Docker; without it
+#       the step logs SKIP instead of failing, same guard philosophy as
+#       test/live-guard.test.js.
+#
+#  Local equivalents:
+#    cd internal-portal && node --test test/live-guard.test.js
+#    docker compose -f internal-portal/docker-compose.yml config --quiet
+# =============================================================================
+name: CI Live (manual — live-guard + compose)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-guard:
+    name: Live guard (needs infra, skips when absent)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: internal-portal
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: internal-portal/package-lock.json
+
+      - name: Install dependencies (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: node live-guard (LIVE_TESTS=1, skips when infra absent)
+        env:
+          LIVE_TESTS: '1'
+        run: node --test test/live-guard.test.js
+
+  compose-healthcheck:
+    name: Compose healthcheck (needs Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: docker compose config (render check, no daemon state change)
+        run: docker compose -f internal-portal/docker-compose.yml config --quiet && echo "compose file renders OK"
+
+      - name: Compose ps (informational, never fails the run)
+        run: >
+          docker compose -f internal-portal/docker-compose.yml ps
+          || echo "SKIP compose ps unavailable (no daemon)"
