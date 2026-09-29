@@ -9,6 +9,73 @@ const { createTestClient } = require('./helpers');
 const { createStore } = require('../src/store');
 const { derivePriorityCode, slaFor } = require('../src/itsm');
 const { backupPortalData, restorePortalData, validatePortalData } = require('../src/backup');
+/**
+ * Backup integrity — checksum sidecar phải được kiểm khi restore.
+ *
+ * Trước khi có thay đổi này, `restorePortalData` ghi file mà không so với
+ * `.sha256`. Một backup bị sửa tay hoặc hỏng bit vẫn được khôi phục âm thầm.
+ * Ba test dưới khóa lại hành vi đó: sửa thì bị chặn, không sửa thì qua,
+ * và thiếu sidecar thì vẫn phải restore được (backup cũ, công cụ khác).
+ */
+test('restore rejects a backup whose content was modified after backup', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'b-integrity-'));
+  try {
+    const dataFile = path.join(dir, 'db.json');
+    await fs.writeFile(dataFile, JSON.stringify({ tickets: [{ id: 'T1' }], assets: [], users: [] }));
+
+    const backup = await backupPortalData({ dataDir: dir, retention: 2 });
+    assert.ok((await validatePortalData(backup.file)).valid);
+
+    // Kịch bản tấn công thật: sửa file .json, GIỮ NGUYÊN sidecar.
+    // Phải copy cả sidecar sang tên mới — nếu không, sidecar không tồn tại
+    // và kiểm tra bị bỏ qua, ta sẽ tưởng đã kiểm tra trong khi chưa.
+    const tampered = `${backup.file}.tampered`;
+    const raw = await fs.readFile(backup.file, 'utf8');
+    await fs.writeFile(tampered, raw.replace('"tickets"', '"ticketz"'));
+    await fs.copyFile(backup.checksumFile, `${tampered}.sha256`);
+
+    await assert.rejects(
+      () => restorePortalData({ backupFile: tampered, targetFile: path.join(dir, 'out.json'), overwrite: true }),
+      /integrity/i,
+      'restore phải TỪ CHỐI backup bị sửa, không được restore âm thầm'
+    );
+
+    // Target phải KHÔNG bị tạo — restore thất bại không được để lại file.
+    await assert.rejects(() => fs.access(path.join(dir, 'out.json')));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('restore of an unmodified backup reports integrity verified', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'b-clean-'));
+  try {
+    await fs.writeFile(path.join(dir, 'db.json'), JSON.stringify({ tickets: [], assets: [], users: [] }));
+    const backup = await backupPortalData({ dataDir: dir, retention: 2 });
+    const result = await restorePortalData({ backupFile: backup.file, targetFile: path.join(dir, 'out.json'), overwrite: true });
+    assert.equal(result.integrity.verified, true, 'backup sạch phải verify thành công');
+    assert.equal(result.integrity.checksum, backup.checksum);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('restore still works when no sidecar exists, and says so', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'b-noside-'));
+  try {
+    await fs.writeFile(path.join(dir, 'db.json'), JSON.stringify({ tickets: [{ id: 'T9' }], assets: [], users: [] }));
+    const backup = await backupPortalData({ dataDir: dir, retention: 2 });
+    // Bỏ sidecar: mô phỏng backup cũ hoặc do công cụ khác tạo.
+    await fs.rm(backup.checksumFile);
+    const result = await restorePortalData({ backupFile: backup.file, targetFile: path.join(dir, 'out.json'), overwrite: true });
+    assert.equal(result.integrity.verified, false);
+    assert.match(result.integrity.reason, /sidecar/);
+    const restored = JSON.parse(await fs.readFile(path.join(dir, 'out.json'), 'utf8'));
+    assert.equal(restored.tickets.length, 1, 'dữ liệu vẫn phải được khôi phục');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
 
 async function open(options = {}) { const c = await createTestClient(options); await c.start(); return c; }
 async function login(c, username, password) { const r = await c.json('POST', '/api/auth/login', { username, password }); assert.equal(r.status, 200); return { Authorization: `Bearer ${r.data.token}` }; }
