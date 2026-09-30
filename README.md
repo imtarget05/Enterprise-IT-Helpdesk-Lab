@@ -8,7 +8,6 @@
   <a href="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml">
     <img src="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml/badge.svg" alt="CI"/>
   </a>
-  <img src="https://img.shields.io/badge/Tests-336%2F337%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
   <img src="https://img.shields.io/badge/API%20Smoke-68%2F68%20Passing-brightgreen?logo=curl&logoColor=white" alt="API Checks"/>
   <img src="https://img.shields.io/badge/Node.js-20%20%7C%2022-339933?logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/PowerShell-AST%20or%20Static%20Fallback-5391FE?logo=powershell&logoColor=white" alt="PowerShell syntax verification"/>
@@ -158,11 +157,25 @@ npm install && npm start
 cd internal-portal
 npm test          # 337 test cases — 336 pass, 1 skipped ✅
 ./test-api.sh     # 68 curl API smoke checks — tất cả pass ✅
-
 # 85 test của cổng Flask (python-portal + isolation), chạy trên DATA_FILE tạm nên không chạm data/db.json của Node
 ( cd python-portal && DATA_FILE="$(mktemp -d)/db.json" PORT=0 \
     python3 -m unittest discover -s . -p 'test_*.py' )
 ```
+
+### Verified results
+
+Measured at commit `c6671ce`. These are three separate suites, not one total.
+
+| Suite | Command | Result |
+|---|---|---|
+| Node portal | `cd internal-portal && npm test` | **336 passed, 1 skipped** (337 cases) |
+| API smoke | `cd internal-portal && ./test-api.sh` | **68/68 passed** |
+| Python services | `.venv-helpdesk/bin/python -m pytest internal-portal/python-portal/tests/ internal-portal/python-portal/test_isolation.py llm-gateway/tests/ -q` | **156 passed, 4 xfailed** |
+
+The 4 `xfailed` are mutation tests (M1–M4) that prove the safety tests have
+teeth: each one re-introduces a real defect — demoting a HIGH_RISK action to
+READ_ONLY, allowing an unknown action, widening RBAC so a VIEWER can execute,
+accepting a raw PowerShell path — and the suite must catch it.
 
 ---
 
