@@ -32,6 +32,8 @@ node_modules/
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv*/
+venv/
 
 # === Oracle data (khong bao gio commit) ===
 **/oradata/
