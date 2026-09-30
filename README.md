@@ -8,7 +8,7 @@
   <a href="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml">
     <img src="https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/workflows/ci.yml/badge.svg" alt="CI"/>
   </a>
-  <img src="https://img.shields.io/badge/Tests-329%2F330%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
+  <img src="https://img.shields.io/badge/Tests-336%2F337%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
   <img src="https://img.shields.io/badge/API%20Smoke-68%2F68%20Passing-brightgreen?logo=curl&logoColor=white" alt="API Checks"/>
   <img src="https://img.shields.io/badge/Node.js-18%20%7C%2020%20%7C%2022-339933?logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/PowerShell-AST%20or%20Static%20Fallback-5391FE?logo=powershell&logoColor=white" alt="PowerShell syntax verification"/>
@@ -156,10 +156,10 @@ npm install && npm start
 **Chạy test:**
 ```bash
 cd internal-portal
-npm test          # 330 test cases — 329 pass, 1 skipped ✅
+npm test          # 337 test cases — 336 pass, 1 skipped ✅
 ./test-api.sh     # 68 curl API smoke checks — tất cả pass ✅
 
-# 82 test của cổng Flask, chạy trên DATA_FILE tạm nên không chạm data/db.json của Node
+# 85 test của cổng Flask (python-portal + isolation), chạy trên DATA_FILE tạm nên không chạm data/db.json của Node
 ( cd python-portal && DATA_FILE="$(mktemp -d)/db.json" PORT=0 \
     python3 -m unittest discover -s . -p 'test_*.py' )
 ```
@@ -201,7 +201,7 @@ Vào tab Tickets → nhấn nút "AI" trên bất kỳ ticket nào
 └── 📁 internal-portal/      ← Module control plane: Node.js portal + AI/ticket/asset API (cùng project)
     ├── 📁 src/              ← API server (Express) + auth/ITSM/monitoring
     ├── 📁 public/           ← Giao diện web (HTML/JS/CSS)
-    └── 📁 test/             ← 330 test cases (329 pass, 1 skipped) + 12 factory scenario contract
+    └── 📁 test/             ← 337 test cases (336 pass, 1 skipped) + 12 factory scenario contract
 ```
 
 ---
