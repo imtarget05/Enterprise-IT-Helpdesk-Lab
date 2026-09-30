@@ -10,7 +10,7 @@
   </a>
   <img src="https://img.shields.io/badge/Tests-336%2F337%20Passing-brightgreen?logo=checkmarx&logoColor=white" alt="Tests"/>
   <img src="https://img.shields.io/badge/API%20Smoke-68%2F68%20Passing-brightgreen?logo=curl&logoColor=white" alt="API Checks"/>
-  <img src="https://img.shields.io/badge/Node.js-18%20%7C%2020%20%7C%2022-339933?logo=nodedotjs&logoColor=white" alt="Node.js"/>
+  <img src="https://img.shields.io/badge/Node.js-20%20%7C%2022-339933?logo=nodedotjs&logoColor=white" alt="Node.js"/>
   <img src="https://img.shields.io/badge/PowerShell-AST%20or%20Static%20Fallback-5391FE?logo=powershell&logoColor=white" alt="PowerShell syntax verification"/>
   <img src="https://img.shields.io/badge/Docker-Hardened-2496ED?logo=docker&logoColor=white" alt="Docker"/>
   <img src="https://img.shields.io/badge/Windows_Server-2022-0078D4?logo=windows&logoColor=white" alt="Windows Server 2022"/>
