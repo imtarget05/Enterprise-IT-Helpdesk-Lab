@@ -1,0 +1,55 @@
+{
+  "probe_id": "health-probe-2026-10-01",
+  "method": "read-only HTTP GET, no mutation, no credential sent",
+  "probed_at_utc": "2026-10-01T19:47:00Z",
+  "url": "https://ca-helpdesk-portal.wittysand-b748274c.eastasia.azurecontainerapps.io/api/health",
+  "http_status": 200,
+  "duration_seconds": 0.31,
+  "revision": "ca-helpdesk-portal--0000001",
+  "pod_hostname": "ca-helpdesk-portal--0000001-576cb78d77-pv2k5",
+  "command": "curl -sS -o /tmp/helpdesk-health.json -w '%{http_code} %{time_total}\\n' https://ca-helpdesk-portal.wittysand-b748274c.eastasia.azurecontainerapps.io/api/health",
+  "response_body_verbatim": {
+    "status": "ok",
+    "uptime": 2456.43,
+    "timestamp": "2026-10-01 19:47",
+    "storage": "json-file",
+    "dataDir": "/app/data",
+    "seeded": true,
+    "service": "enterprise-it-asset-portal",
+    "version": "2.0.0",
+    "host": "ca-helpdesk-portal--0000001-576cb78d77-pv2k5",
+    "authMode": "lab",
+    "counts": {
+      "assets": 6,
+      "tickets": 6,
+      "licenses": 4,
+      "ticketEvents": 1,
+      "problems": 0,
+      "changes": 0,
+      "accessRequests": 0,
+      "monitoringChecks": 0,
+      "monitoringHistory": 0,
+      "auditEvents": 4,
+      "notifications": 0
+    },
+    "webhook": "mock"
+  },
+  "what_this_proves": [
+    "The portal is deployed and reachable on a public Azure Container App revision (ca-helpdesk-portal--0000001).",
+    "The response is revision-specific (host is the revision pod hostname), not a cached edge response.",
+    "The health endpoint is reachable without a credential, as expected for a health path."
+  ],
+  "what_this_does_not_prove": [
+    "authMode is \"lab\", not production identity. This probe says nothing about enterprise SSO, Entra ID, or any real identity provider.",
+    "webhook is \"mock\": notification delivery is stubbed in this revision. No external webhook endpoint received anything.",
+    "The Python automation gateway (llm-gateway/automation) is NOT wired to any HTTP route in this running portal. It is proven by pytest only.",
+    "Live Active Directory mutation was never executed. The AD runtime paths in scripts/Disable-ADAccount.ps1 and scripts/New-CompanyUser.ps1 remain NOT_RUN (docs/SAFE-AUTOMATION.md:52-53).",
+    "This probe sent no credential. It did not exercise any role-authenticated business route."
+  ],
+  "related_evidence": [
+    "docs/SAFE-AUTOMATION.md",
+    "RECRUITER-EVIDENCE.md",
+    "llm-gateway/tests/test_automation_gateway.py",
+    "llm-gateway/tests/test_automation_mutations.py"
+  ]
+}
