@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API-level inbound policy for the Helpdesk API at API Management.
+
+  Substituted by infra/modules/apim/api-surface.bicep before upload: the token
+  {{ALLOWED_ORIGINS}} is replaced with one <origin> element per entry in the
+  portal's ALLOWED_ORIGINS environment variable (internal-portal/.env.example).
+  It is left as a token here so the file stays a reviewable XML document instead
+  of a Bicep string, and so changing the allowed-origin list is a
+  parameter-file diff rather than a template edit.
+
+  Front Door sits in front of APIM, so the only Origin a browser presents is the
+  Front Door endpoint. Anything not on this list is refused at the edge, not by
+  the portal.
+
+  The portal's own CORS_ORIGINS-equivalent (ALLOWED_ORIGINS in
+  internal-portal/src/app.js) and this list must not diverge: a mismatch shows up
+  as a CORS error in the browser and a 200 in the gateway log.
+-->
+<policies>
+  <inbound>
+    <base />
+    <cors>
+      <allowed-origins>
+        {{ALLOWED_ORIGINS}}
+      </allowed-origins>
+      <!-- Credentials are allowed because the portal sends the bearer token in
+           the Authorization header on every call. Without allow-credentials the
+           browser drops the response. -->
+      <allow-credentials>true</allow-credentials>
+      <!-- Negative value: do not cache preflight, so a revoked origin takes
+           effect immediately instead of after a browser cache lifetime. -->
+      <max-age>-1</max-age>
+    </cors>
+    <rate-limit calls="{{API_CALLS_PER_MINUTE}}" renewal-period="60" />
+  </inbound>
+  <backend>
+    <!-- The serviceUrl of the API already points at the Container Apps origin.
+         set-backend-service is intentionally absent: declaring the base once on
+         the API keeps the backend definition and the routed URL from drifting
+         into two different backends. -->
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

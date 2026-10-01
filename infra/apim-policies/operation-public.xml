@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Operation policy for the unauthenticated operational routes: /api/health and
+  /metrics.
+
+  These are public on purpose: an external uptime monitor and the CI verify job
+  have no helpdesk session, and a probe that needs a credential is a probe that
+  fails open when the credential expires. The bucket is several times the
+  authenticated limit because a probe is cheap and frequent, while
+  /api/tickets and /api/assets are the operations that cost real work.
+
+  /api/audit, /api/access-requests/*, /api/changes/:id/approve and every
+  /api/ai/* route are NOT in this file and are not registered as operations
+  unless apiOperations lists them. Unregistered means unreachable through APIM --
+  a 404 at the edge, not a policy someone can be tempted to relax.
+-->
+<policies>
+  <inbound>
+    <base />
+    <rate-limit calls="{{RATE_LIMIT_CALLS}}" renewal-period="{{RATE_LIMIT_WINDOW_SECONDS}}" counter-key="probe-rate-by-ip" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>

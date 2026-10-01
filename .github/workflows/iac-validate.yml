@@ -1,0 +1,106 @@
+# IaC Validate — Helpdesk enterprise infrastructure
+#
+# The IaC gate. It runs infra/validate.sh, which compiles every Bicep template,
+# resolves every committed parameter file, runs the negative tests, asserts the
+# security invariants on the compiled ARM artifact, runs the invariant-checker's
+# own traversal contracts, and proves the tree has no cross-repository dependency.
+#
+# THIS JOB DEPLOYS NOTHING. There is no Azure login, no `az deployment` and no
+# federated credential in this workflow, and there is deliberately no
+# `environment:` protection on it. A green run means "the templates are
+# well-formed and the guards hold" — it is NOT evidence that any Azure resource
+# exists. Deployment is a separate, explicitly authorised step, and claiming
+# otherwise from a green check here is exactly the overclaim the evidence rules
+# forbid.
+#
+# SELF-CONTAINED BY DESIGN. Every path in this file is relative to THIS
+# repository. It references no sibling checkout, no path outside the repository
+# root and no reusable workflow, and infra/scripts/check-independence.sh asserts
+# exactly that as step 8 of the same run. A workflow that reached outside its own
+# repository would be unrunnable on a clean checkout, so the independence property
+# is enforced on the CI definition itself rather than only on the templates.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/iac-validate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/iac-validate.yml'
+  workflow_dispatch:
+
+# A newer commit makes older IaC conclusions irrelevant, so cancel rather than
+# queue.
+concurrency:
+  group: iac-validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Compile, lint and negative-test the Bicep
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The independence check looks for submodules, so a shallow checkout
+          # with no submodule content is exactly the state it expects. Nothing
+          # here fetches a sibling repository: this workflow must be runnable on
+          # a machine that has never seen one.
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # WHY `az bicep install` AND NOT A PINNED DOWNLOAD URL: it is the version
+      # the Azure CLI resolves, it authenticates nothing, and it puts the binary
+      # on PATH so validate.sh's compiler probe is satisfied. validate.sh refuses
+      # to run without a usable compiler rather than skipping its own checks, so
+      # this step is the only thing standing between a runner and a
+      # silently-green job.
+      - name: Install Bicep CLI
+        run: |
+          az bicep install
+          echo "$HOME/.azure/bin" >> "$GITHUB_PATH"
+          bicep --version
+
+      # The compiled ARM template is the evidence that the templates built, and
+      # it is the artifact the security invariants are asserted against. It is
+      # uploaded even when a later step fails, so a red run is still reviewable
+      # by anyone who is not reading the log.
+      #
+      # WHY THIS IS SEPARATE FROM validate.sh RATHER THAN INSIDE IT: the artifact
+      # has to be named and placed in the workspace, which is a CI concern. The
+      # script compiles the same file itself for its own invariant step; this
+      # compiles it again purely to hand the result to upload-artifact.
+      - name: Compile the entrypoint for the artifact
+        if: always()
+        run: |
+          mkdir -p iac-artifact
+          bicep build infra/main.bicep --outfile iac-artifact/helpdesk-main.json
+          bicep --version > iac-artifact/bicep-version.txt
+          python3 --version >> iac-artifact/bicep-version.txt
+
+      - name: Upload IaC artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iac-compiled-templates
+          path: iac-artifact/
+          retention-days: 30
+
+      # The single gate. It compiles every template (warnings included), resolves
+      # the committed parameter files, runs the negative tests, asserts the
+      # security invariants, runs the traversal contracts, and runs the
+      # independence proof. A local green and this green mean the same thing
+      # because this IS the script.
+      - name: Run IaC validation
+        run: ./infra/validate.sh

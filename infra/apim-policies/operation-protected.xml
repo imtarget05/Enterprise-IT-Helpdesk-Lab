@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Operation policy for the authenticated Helpdesk portal routes: /api/tickets*,
+  /api/assets*, /api/access-requests*, /api/changes*, /api/audit, /api/ai/* and
+  the monitoring routes.
+
+  WHY THIS VALIDATES A TOKEN AT ALL, GIVEN THE PORTAL HAS ITS OWN AUTH: the
+  portal authenticates its own users locally (AUTH_MODE=lab with LAB_AUTH_USERS,
+  internal-portal/src/auth.js). This policy is the edge-level guard that says the
+  caller has a helpdesk session at all, so an unauthenticated request to
+  /api/audit or /api/access-requests/:id/approve is refused at the gateway rather
+  than being relied upon to be refused by application code. Two independent
+  checks beat one, and the cheap one runs first.
+
+  Tokens are substituted by infra/modules/apim/operation.bicep:
+    {{JWT_ISSUER}}    -> the issuer URL, passed in as a parameter so the same
+                         templates work in a sovereign cloud
+    {{JWT_AUDIENCE}}  -> the audience claim the accepted tokens must carry
+    {{TENANT_ID}}     -> the tid claim, which pins the tenant
+
+  Issuer and signing-key validation is inherited from the OpenID Connect metadata
+  URL rather than restated with an <issuers> block: the discovery document is the
+  source of truth for the issuer's keys, and duplicating the issuer string here
+  would be a second thing to forget to update.
+-->
+<policies>
+  <inbound>
+    <base />
+    <validate-jwt header="Authorization" failed-policy-response-status-code="401" failed-policy-response-body="Unauthorized" token-validation="true">
+      <openid-connect url="{{JWT_ISSUER}}" />
+      <audiences>
+        <audience>{{JWT_AUDIENCE}}</audience>
+      </audiences>
+      <required-claims>
+        <!-- A token issued for a different audience is structurally valid and
+             would otherwise pass; pinning the claim is what makes the audience
+             check unambiguous. -->
+        <claim name="tid">{{TENANT_ID}}</claim>
+      </required-claims>
+    </validate-jwt>
+    <!-- Per-key counter: the quota that bounds load on the portal, because the
+         counter is keyed on the token subject rather than the source IP, and a
+         shared office NAT makes an IP quota meaningless.
+         {{RATE_LIMIT_CALLS}} / {{RATE_LIMIT_WINDOW_SECONDS}} come from the
+         per-operation entry in the apiOperations parameter. -->
+    <rate-limit calls="{{RATE_LIMIT_CALLS}}" renewal-period="{{RATE_LIMIT_WINDOW_SECONDS}}" counter-key="call-rate-by-key" />
+  </inbound>
+  <backend>
+    <base />
+  </backend>
+  <outbound>
+    <base />
+  </outbound>
+  <on-error>
+    <base />
+  </on-error>
+</policies>
