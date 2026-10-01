@@ -207,6 +207,26 @@ jobs:
   # 5b) Secret scanning — hard gate (default config). Fails the build on leaks.
   # ---------------------------------------------------------------------------
   gitleaks:
+    # Secret scanning — HARD GATE. Fails the build on leaks.
+    #
+    # WHY THE CLI AND NOT gitleaks-action@v2. The action decides whether a
+    # license is required by asking the GitHub API who owns the repository, and
+    # since the v2 token change it also requires GITHUB_TOKEN to scan a
+    # pull_request at all. On this repository the action failed the PR run with
+    # "GITHUB_TOKEN is now required to scan pull requests" while the identical
+    # push run was green.
+    #
+    # Same repository, same revision, opposite verdict decided by the event
+    # type. That failure mode is the real problem: a scanner that goes red for a
+    # reason unrelated to the tree teaches people to re-run it, and re-running
+    # until green is how a genuine finding gets waved through. The pinned CLI has
+    # no license gate and makes no API call, so the same tree gives the same
+    # verdict on every event.
+    #
+    # The version is pinned WITH its SHA256, verified against the published
+    # asset. Unpinned, a gitleaks release that adds a rule turns a green main red
+    # on an unrelated PR; unchecked, a substituted asset runs with the scanner's
+    # own privileges.
     name: Secret scanning (gitleaks)
     runs-on: ubuntu-latest
     steps:
@@ -215,8 +235,50 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          version=8.28.0
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"
+          curl -sSfL "$url" -o /tmp/gitleaks.tar.gz
+          echo "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb  /tmp/gitleaks.tar.gz" \
+            | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      # THE GATE. The working tree only: this is what a new commit can break, and
+      # it is deterministic, so the same revision always gives the same verdict.
+      - name: Scan the working tree
+        run: |
+          set -euo pipefail
+          gitleaks dir . --redact --exit-code 1
+
+      # History is reported, never gated: this repository has a test canary in
+      # old commits. Rewriting history would invalidate every SHA, CI run and
+      # audit reference this repository depends on, and the canary is not a
+      # credential. A clean working tree does NOT mean history is clean — this
+      # step is what keeps that visible. If a scan ever reports something that
+      # IS a real credential: rotate FIRST, then consider rewriting history.
+      # Never the reverse, and never a blanket allowlist.
+      - name: Report historical findings (advisory)
+        if: always()
+        run: |
+          set -euo pipefail
+          gitleaks git . --redact \
+            --report-path gitleaks-history.json --exit-code 0
+          count=$(python3 -c "import json;print(len(json.load(open('gitleaks-history.json'))))")
+          echo "historical findings: $count"
+          if [ "$count" -gt 0 ]; then
+            echo "::warning title=Secret scanning (advisory)::${count} finding(s) in git history. Current tree gate is green. See gitleaks-history.json."
+          fi
+
+      - name: Upload the history report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-history-report
+          path: gitleaks-history.json
+          retention-days: 30
 
   # ---------------------------------------------------------------------------
   # 5c) Dependency audit for python-portal — ADVISORY (continue-on-error)
