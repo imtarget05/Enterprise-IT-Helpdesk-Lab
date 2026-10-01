@@ -1,0 +1,154 @@
+name: Terraform Validate
+
+# =============================================================================
+#  Phase 1 gate: Terraform is the canonical, deployable IaC language.
+#
+#  What runs WITHOUT Azure credentials (every push/PR):
+#    1. terraform fmt -check          — canonical formatting
+#    2. terraform init -backend=false — provider pins resolve
+#    3. terraform validate            — static configuration validity
+#    4. terraform test                — 13 mocked runs (parity + wiring + input
+#                                       validation + negative controls)
+#    5. unittest discover             — 29 tests proving each gate control BITES
+#                                       (frozen / parity / plan-invariants)
+#    6. check_bicep_frozen.py         — Bicep templates unchanged since Phase 1
+#    7. check_parity.py               — 130 Bicep ↔ Terraform checks hold
+#    8. check_plan_invariants.py      — 13 invariants hold on the committed
+#                                       control-proof fixture
+#
+#  What runs ONLY when the repo variable AZURE_OIDC_ENABLED == 'true'
+#  (Phase 2+ wiring; the job is skipped otherwise, never silently green):
+#    9. a REAL `terraform plan` with GitHub OIDC against the evidence resource
+#       group, then check_plan_invariants.py against the REAL plan JSON.
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/terraform-validate.yml'
+  pull_request:
+    paths:
+      - 'infra/**'
+      - '.github/workflows/terraform-validate.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1-8) Credential-free gate (validate + test + controls with teeth)
+  # ---------------------------------------------------------------------------
+  validate:
+    name: fmt · validate · test · controls
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Formatting (fmt -check, no drift)
+        run: terraform fmt -check -recursive
+
+      - name: Init providers (backend=false, read-only)
+        run: terraform init -backend=false -input=false
+
+      - name: Validate configuration
+        run: terraform validate
+
+      - name: Unit tests (mocked provider, no Azure calls)
+        run: terraform test
+
+      - name: Control bite tests (std lib unittest, froze/parity/plan)
+        run: python3 -m unittest discover -s scripts/tests -v
+
+      - name: Bicep freeze control
+        run: python3 scripts/check_bicep_frozen.py --repo-root ../..
+
+      - name: Bicep↔Terraform parity control
+        run: python3 scripts/check_parity.py --repo-root ../..
+
+      - name: Plan-invariant control on the committed fixture
+        run: python3 scripts/check_plan_invariants.py fixtures/plan-ok.json
+
+  # ---------------------------------------------------------------------------
+  # 9) REAL plan against Azure — Phase 2+ only, gated on repo variable.
+  #    Never secrets.* in `if` (unavailable there); vars.AZURE_OIDC_ENABLED is
+  #    an explicit, reviewable switch set when Phase 2 lands OIDC.
+  # ---------------------------------------------------------------------------
+  real-plan:
+    name: real plan · plan-JSON control
+    runs-on: ubuntu-latest
+    if: vars.AZURE_OIDC_ENABLED == 'true'
+    needs: [validate]
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.*"
+          terraform_wrapper: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Init providers (backend=false, read-only)
+        run: terraform init -backend=false -input=false
+
+      - name: Azure login (GitHub OIDC, no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Plan is read-only: it creates nothing. The plan JSON is transient —
+      # it is checked and then discarded, never committed (it may embed the
+      # configured admin password the same way `terraform plan` always does).
+      - name: Real plan (read-only, dev tfvars, refresh on)
+        run: |
+          export ARM_USE_OIDC=true
+          export ARM_SUBSCRIPTION_ID='${{ vars.AZURE_SUBSCRIPTION_ID }}'
+          terraform plan -var-file=env/dev.tfvars -out="$RUNNER_TEMP/phase1-dev.tfplan"
+
+      - name: Plan-JSON invariant control on the REAL plan
+        run: |
+          terraform show -json "$RUNNER_TEMP/phase1-dev.tfplan" > "$RUNNER_TEMP/plan.json"
+          python3 scripts/check_plan_invariants.py "$RUNNER_TEMP/plan.json"
+
+      - name: Discard the transient plan
+        if: always()
+        run: rm -f "$RUNNER_TEMP/phase1-dev.tfplan" "$RUNNER_TEMP/plan.json"

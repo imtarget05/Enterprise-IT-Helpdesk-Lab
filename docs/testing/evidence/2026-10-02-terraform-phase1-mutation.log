@@ -1,0 +1,61 @@
+=== M1-keyvault-purge-protection : modules/keyvault/main.tf
+--- mutation applied
+26c26
+<   purge_protection_enabled      = true
+---
+>   purge_protection_enabled      = false
+--- terraform test exit=1 (0 would be a BROKEN control)
+[31m│[0m [0m[1m[31mError: [0m[0m[1mTest assertion failed[0m
+[31m│[0m [0mKey Vault purge protection MUST be enabled (irreversible secret loss
+[31mFailure![0m[0m 6 passed, 1 failed.
+--- reverted
+
+=== M2-postgres-require-secure-transport : modules/database/main.tf
+--- mutation applied
+48c48
+<   value     = "ON"
+---
+>   value     = "OFF"
+--- terraform test exit=1 (0 would be a BROKEN control)
+[31m│[0m [0m[1m[31mError: [0m[0m[1mTest assertion failed[0m
+[31m│[0m [0mrequire_secure_transport MUST be ON.
+[31mFailure![0m[0m 6 passed, 1 failed.
+--- reverted
+
+=== M3-aca-subnet-delegation : modules/network/main.tf
+--- mutation applied
+44c44
+<       name = "Microsoft.App/environments"
+---
+>       name = "Microsoft.Sql/servers"
+--- terraform test exit=1 (0 would be a BROKEN control)
+[31m│[0m [0m[1m[31mError: [0m[0m[1mTest assertion failed[0m
+[31m│[0m [0mThe ACA subnet MUST be delegated to Microsoft.App/environments or Container
+[31mFailure![0m[0m 6 passed, 1 failed.
+--- reverted
+
+=== M4-servicebus-duplicate-detection : modules/messaging/main.tf
+--- mutation applied
+37c37
+<   requires_duplicate_detection            = true
+---
+>   requires_duplicate_detection            = false
+--- terraform test exit=1 (0 would be a BROKEN control)
+[31m│[0m [0m[1m[31mError: [0m[0m[1mTest assertion failed[0m
+[31m│[0m [0mDuplicate detection MUST be on: Phase 5 exactly-once depends on it.
+[31mFailure![0m[0m 6 passed, 1 failed.
+--- reverted
+
+=== M5-container-app-plain-http : modules/apps/main.tf
+--- mutation applied
+57c57
+<     allow_insecure_connections = false
+---
+>     allow_insecure_connections = true
+--- terraform test exit=1 (0 would be a BROKEN control)
+[31m│[0m [0m[1m[31mError: [0m[0m[1mTest assertion failed[0m
+[31m│[0m [0mPlain HTTP must not be allowed into the portal.
+[31mFailure![0m[0m 6 passed, 1 failed.
+--- reverted
+
+raw logs: /tmp/tf-mutation-evidence

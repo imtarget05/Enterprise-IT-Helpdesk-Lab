@@ -1,0 +1,20 @@
+# Terraform local state and provider cache — never commit.
+# The lock file (`.terraform.lock.hcl`) IS committed: it pins provider versions.
+.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Transient plan JSON used by scripts/check_plan_invariants.py.
+plan-*.json
+!fixtures/plan-*.json
