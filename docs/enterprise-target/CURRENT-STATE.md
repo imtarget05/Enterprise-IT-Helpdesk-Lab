@@ -1,9 +1,9 @@
 # CURRENT STATE — Enterprise-IT-Helpdesk-Lab
 
 ```text
-measured_at : 2026-10-01
-method      : read-only (git + filesystem). Azure NOT probed. Test suites NOT run.
-mutations   : `git fetch --all --prune` only (remote-tracking refs; working tree untouched)
+measured_at : 2026-10-02
+method      : read-only for Azure (plan only); local suites re-run.
+mutations   : none against the working tree (fetch of remote refs only)
 rule        : no number appears below unless it was measured here, or is explicitly
               labelled CARRIED_FORWARD_NOT_REMEASURED.
 ```
@@ -13,43 +13,61 @@ rule        : no number appears below unless it was measured here, or is explici
 | Field | Value |
 |---|---|
 | remote | `https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab.git` |
-| **canonical ref (`origin/main`)** | `f9dab7dfb0538f7730079ad0e67890a001a60c11` |
-| local `HEAD` | `f8f5fed3c036c75768eeb788c1ebcff76f9f189d` (branch `main`) |
-| drift vs origin | **DIVERGENT: +2 ahead / −1 behind** |
-| worktree | **CLEAN** |
-
-**Blocker before freezing this baseline:** the branch has **diverged** from `origin/main`. The pushed commit `f9dab7d` (`chore: record portal image digest for 3711ddc…`) is *not* in the local tree. Any ledger built on local `HEAD` alone is incomplete. Reconcile (rebase/merge) before Phase 1.
+| **canonical ref (`origin/main`)** | `8401319b564e668db424a973c3f7fc72a9f823fd` |
+| local `HEAD` | `8401319b564e668db424a973c3f7fc72a9f823fd` (branch `main`) |
+| drift vs origin | **RECONCILED — HEAD == origin/main** |
+| worktree | **CLEAN before this pass; changes below are the Phase 0/1 deliverable** |
 
 ## 2. Infrastructure as deployed today
 
 | Field | Value |
 |---|---|
-| IaC language | **Bicep** (Terraform: **NOT PRESENT** — 0 `*.tf` files) |
-| entrypoints | `infra/main.bicep` |
-| modules | `infra/modules/{apps,database,keyvault,messaging,network,observability}` |
-| parameters | `infra/parameters/{dev,prod}.bicepparam` |
-| invariant checker | `infra/check_invariants.py` |
-| validation | `infra/validate.sh`, `infra/bicepconfig.json` |
-| CI | `.github/workflows/iac-validate.yml` *(also: `ci.yml`, `ci-live.yml`, `build-container.yml`, `keepalive.yml`, `llm-gateway.yml`)* |
+| IaC language | **Terraform (canonical, `infra/terraform/`)**; Bicep **FROZEN** (`infra/FROZEN.lock.json`, 10 files) |
+| entrypoints | `infra/terraform/main.tf` · `infra/main.bicep` (frozen parity source) |
+| modules | `infra/terraform/modules/{network,keyvault,database,messaging,observability,apps}` |
+| parameters | `infra/terraform/env/{dev,prod}.tfvars` (parity with `infra/parameters/*.bicepparam`) |
+| invariant checkers | `infra/check_invariants.py` (ARM JSON) · `infra/terraform/scripts/{check_bicep_frozen,check_parity,check_plan_invariants}.py` |
+| validation | `infra/validate.sh`, `infra/bicepconfig.json`, `terraform validate` + `terraform test` |
+| CI | `.github/workflows/{ci.yml,ci-live.yml,iac-validate.yml,terraform-validate.yml,build-container.yml,keepalive.yml,llm-gateway.yml}` |
 
-## 3. Verified seams present in source
+## 3. Measured this pass (2026-10-02)
+
+| Suite | Command | Result |
+|---|---|---|
+| Node portal | `cd internal-portal && npm test` | **343 tests — 342 pass, 1 skipped, 0 fail** |
+| API smoke | `cd internal-portal && ./test-api.sh` | **68/68 pass (100.0%)** |
+| Python services | pytest on python-portal + llm-gateway | **156 passed, 4 xfailed** |
+| IaC validate (Bicep) | `bash infra/validate.sh` | **ALL CHECKS PASSED** (16/16 traversal contracts, 2/2 invariants) |
+| Terraform | `terraform test` (azurerm 4.81.0, mocked) | **13/13 passed** |
+| Control bite tests | `python3 -m unittest discover -s infra/terraform/scripts/tests` | **29/29 passed** |
+| Bicep freeze | `check_bicep_frozen.py` | 10/10 digests match |
+| Bicep↔Terraform parity | `check_parity.py` | **130/130 hold** |
+| Plan invariants (fixture) | `check_plan_invariants.py fixtures/plan-ok.json` | **13/13 hold** |
+| Plan invariants (REAL plan) | read-only `terraform plan` + control on `show -json` | **13/13 hold** (`15 to add, 0 to change, 0 to destroy`) |
+| Leak control (REAL plan) | same plan + `--forbid-value <password>` | **3 findings at exact JSON paths** (values redacted) |
+| Terraform mutations | `scripts/mutation-evidence.sh` M1–M5 | each fails the intended control |
+| CI @ `origin/main` | `gh run view 36898127409` | **12/12 jobs green** |
+| Azure inventory | `az resource list -g rg-portfolio-evidence` | 1 workspace, 1 ACA env, **4 container apps** |
+| Helpdesk revision | `az containerapp revision list -n ca-helpdesk-portal` | **`--0000001` ACTIVE**, digest `sha256:d9eb0b9a…`, 1 replica |
 
 > Presence in source ≠ verified at runtime. This section records existence only.
 
 - PostgreSQL durable store adapter — `internal-portal/src/postgres-adapter.js` (uses `pg.Pool`)
 - Adapter test — `internal-portal/test/postgres-adapter.test.js`
 - Messaging module (`messaging/`) present in Bicep (Service Bus seam)
+- Terraform parity port — `infra/terraform/` (ADR-0003)
 
 ## 4. Open defects / documented gaps (carried, with source)
 
 - **[helpdesk-capability-gaps]** — documented capability gaps, not blockers: (1) no role-based access on portal routes, (2) no alert/ticket dedupe, (3) SLA is `slaPercent` only, no clock-based breach. *source: `docs/PORTFOLIO-COMPLETION-AUDIT-v2.md`*
 - **[helpdesk-azure-boundary]** — the live footprint is narrow: `authMode: "lab"`, mock webhook, no credential in the probe. Any "live RBAC / durable approval" claim must state this boundary. *source: `docs/PORTFOLIO-FLAGSHIP-MATRIX.md`*
+- **[phase1-boundaries]** — Terraform has never applied: no state, no import (Phase 2/3); plans are transient (passwords always embed in `show -json`) and uncommitted. *source: `infra/terraform/README.md`*
 
 ## 5. NOT YET MEASURED (fail-closed)
 
-- test suite @ `origin/main` ............ **UNMEASURED**
-- CI status @ `origin/main` ............. **UNMEASURED**
-- Azure live revision / image digest .... **UNMEASURED**
+- test suite @ `origin/main` ............ **MEASURED (§3)**
+- CI status @ `origin/main` ............. **MEASURED (§3)**
+- Azure live revision / image digest .... **MEASURED read-only (§3)**
 - privilege separation / multi-replica behavior .... **UNMEASURED**
 - cost exposure ......................... **UNMEASURED**
 
@@ -58,4 +76,4 @@ CARRIED_FORWARD_NOT_REMEASURED (audit docs only): earlier local suite `137 passe
 ## 6. Hazards
 
 - `$HOME` (`/Users/mainguyenbinhtan`) is a **DIRTY worktree** of `FlashSale-Backend`. `Projects/.git` is an **empty stub** → any git run from `Projects/` resolves to `$HOME`. **All git MUST use `git -C <abs repo path>`.**
-- Branch divergence (see §1) — measure/freeze only after reconciliation.
+- The transient Terraform plan embeds the configured dev password placeholder — deleted after each run, never committed.

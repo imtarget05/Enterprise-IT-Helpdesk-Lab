@@ -1,0 +1,322 @@
+{
+  "program": "Enterprise-IT-Helpdesk-Lab — Phase 1 Bicep ↔ Terraform parity manifest",
+  "rule": "Bicep under infra/ is FROZEN and is the parity source of truth. Every entry here is machine-checked by scripts/check_parity.py. Adding or removing a resource on either side without updating this manifest FAILS the control.",
+  "root": {
+    "bicep": "infra/main.bicep",
+    "terraform": "infra/terraform/main.tf",
+    "terraform_variables": "infra/terraform/variables.tf",
+    "bicep_module_paths": [
+      "modules/network/vnet.bicep",
+      "modules/observability/main.bicep",
+      "modules/keyvault/main.bicep",
+      "modules/database/postgres.bicep",
+      "modules/messaging/servicebus.bicep",
+      "modules/apps/portal.bicep"
+    ],
+    "terraform_modules": ["network", "observability", "keyvault", "database", "messaging", "apps"],
+    "parameter_pairs": [
+      { "bicep": "location", "terraform": "location" },
+      { "bicep": "tenantId", "terraform": "tenant_id" },
+      { "bicep": "environmentName", "terraform": "environment_name" },
+      { "bicep": "nameSuffix", "terraform": "name_suffix" },
+      { "bicep": "postgresAdminPassword", "terraform": "postgres_admin_password" },
+      { "bicep": "containerImage", "terraform": "container_image" }
+    ]
+  },
+  "modules": [
+    {
+      "name": "network",
+      "bicep": "infra/modules/network/vnet.bicep",
+      "terraform": "infra/terraform/modules/network/main.tf",
+      "bicep_resource_types": ["Microsoft.Network/virtualNetworks"],
+      "terraform_resource_types": ["azurerm_virtual_network", "azurerm_subnet"],
+      "invariants": [
+        {
+          "id": "vnet-address-space",
+          "bicep_regex": "addressPrefix string = '10\\.10\\.0\\.0/16'",
+          "terraform_regex": "default\\s*=\\s*\"10\\.10\\.0\\.0/16\""
+        },
+        {
+          "id": "infra-subnet",
+          "bicep_regex": "addressPrefix: '10\\.10\\.0\\.0/24'",
+          "terraform_regex": "\"10\\.10\\.0\\.0/24\""
+        },
+        {
+          "id": "aca-subnet",
+          "bicep_regex": "addressPrefix: '10\\.10\\.2\\.0/23'",
+          "terraform_regex": "\"10\\.10\\.2\\.0/23\""
+        },
+        {
+          "id": "private-endpoints-subnet",
+          "bicep_regex": "addressPrefix: '10\\.10\\.4\\.0/24'",
+          "terraform_regex": "\"10\\.10\\.4\\.0/24\""
+        },
+        {
+          "id": "aca-subnet-delegation",
+          "bicep_regex": "serviceName: 'Microsoft\\.App/environments'",
+          "terraform_regex": "Microsoft\\.App/environments"
+        }
+      ]
+    },
+    {
+      "name": "keyvault",
+      "bicep": "infra/modules/keyvault/main.bicep",
+      "terraform": "infra/terraform/modules/keyvault/main.tf",
+      "bicep_resource_types": ["Microsoft.KeyVault/vaults"],
+      "terraform_resource_types": ["azurerm_key_vault"],
+      "invariants": [
+        {
+          "id": "purge-protection-on",
+          "bicep_regex": "enablePurgeProtection: true",
+          "terraform_regex": "purge_protection_enabled\\s*=\\s*true"
+        },
+        {
+          "id": "rbac-authorization-on",
+          "bicep_regex": "enableRbacAuthorization: true",
+          "terraform_regex": "rbac_authorization_enabled\\s*=\\s*true"
+        },
+        {
+          "id": "soft-delete-retention-90",
+          "bicep_regex": "softDeleteRetentionInDays int = 90",
+          "terraform_regex": "variable\\s+\"soft_delete_retention_in_days\"[\\s\\S]{0,400}default\\s*=\\s*90"
+        },
+        {
+          "id": "network-acl-bypass-azure-services",
+          "bicep_regex": "bypass: 'AzureServices'",
+          "terraform_regex": "bypass\\s*=\\s*\"AzureServices\""
+        }
+      ]
+    },
+    {
+      "name": "database",
+      "bicep": "infra/modules/database/postgres.bicep",
+      "terraform": "infra/terraform/modules/database/main.tf",
+      "bicep_resource_types": [
+        "Microsoft.DBforPostgreSQL/flexibleServers",
+        "Microsoft.DBforPostgreSQL/flexibleServers/configurations",
+        "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+        "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules"
+      ],
+      "terraform_resource_types": [
+        "azurerm_postgresql_flexible_server",
+        "azurerm_postgresql_flexible_server_configuration",
+        "azurerm_postgresql_flexible_server_database",
+        "azurerm_postgresql_flexible_server_firewall_rule"
+      ],
+      "invariants": [
+        {
+          "id": "require-secure-transport-on",
+          "bicep_regex": "name: 'require_secure_transport'.*value: 'ON'",
+          "terraform_regex": "require_secure_transport.*value\\s*=\\s*\"ON\""
+        },
+        {
+          "id": "burstable-sku",
+          "bicep_regex": "skuName string = 'Standard_B1ms'",
+          "terraform_regex": "\"B_Standard_B1ms\""
+        },
+        {
+          "id": "storage-32gb",
+          "bicep_regex": "storageSizeGB int = 32",
+          "terraform_regex": "variable\\s+\"storage_mb\"[\\s\\S]{0,300}default\\s*=\\s*32768"
+        },
+        {
+          "id": "auto-grow-enabled",
+          "bicep_regex": "autoGrow: 'Enabled'",
+          "terraform_regex": "auto_grow_enabled\\s*=\\s*true"
+        },
+        {
+          "id": "backup-retention-7",
+          "bicep_regex": "backupRetentionDays: 7",
+          "terraform_regex": "variable\\s+\"backup_retention_days\"[\\s\\S]{0,300}default\\s*=\\s*7"
+        },
+        {
+          "id": "geo-redundant-backup-disabled",
+          "bicep_regex": "geoRedundantBackup: 'Disabled'",
+          "terraform_regex": "geo_redundant_backup_enabled\\s*=\\s*false"
+        },
+        {
+          "id": "primary-database-name",
+          "bicep_regex": "name: 'helpdesk'",
+          "terraform_regex": "default\\s*=\\s*\"helpdesk\""
+        },
+        {
+          "id": "azure-services-firewall",
+          "bicep_regex": "startIpAddress: '0\\.0\\.0\\.0'",
+          "terraform_regex": "start_ip_address\\s*=\\s*\"0\\.0\\.0\\.0\""
+        }
+      ]
+    },
+    {
+      "name": "messaging",
+      "bicep": "infra/modules/messaging/servicebus.bicep",
+      "terraform": "infra/terraform/modules/messaging/main.tf",
+      "bicep_resource_types": [
+        "Microsoft.ServiceBus/namespaces",
+        "Microsoft.ServiceBus/namespaces/queues"
+      ],
+      "terraform_resource_types": [
+        "azurerm_servicebus_namespace",
+        "azurerm_servicebus_queue"
+      ],
+      "invariants": [
+        {
+          "id": "standard-sku",
+          "bicep_regex": "tier: 'Standard'",
+          "terraform_regex": "sku\\s*=\\s*\"Standard\""
+        },
+        {
+          "id": "tls-1-2",
+          "bicep_regex": "minimumTlsVersion: '1\\.2'",
+          "terraform_regex": "minimum_tls_version\\s*=\\s*\"1\\.2\""
+        },
+        {
+          "id": "lock-duration-5m",
+          "bicep_regex": "lockDuration: 'PT5M'",
+          "terraform_regex": "variable\\s+\"lock_duration\"[\\s\\S]{0,400}default\\s*=\\s*\"PT5M\""
+        },
+        {
+          "id": "max-delivery-count-10",
+          "bicep_regex": "maxDeliveryCount: 10",
+          "terraform_regex": "variable\\s+\"max_delivery_count\"[\\s\\S]{0,300}default\\s*=\\s*10"
+        },
+        {
+          "id": "dead-letter-on-expiration",
+          "bicep_regex": "deadLetteringOnMessageExpiration: true",
+          "terraform_regex": "dead_lettering_on_message_expiration\\s*=\\s*true"
+        },
+        {
+          "id": "duplicate-detection-on",
+          "bicep_regex": "requiresDuplicateDetection: true",
+          "terraform_regex": "requires_duplicate_detection\\s*=\\s*true"
+        },
+        {
+          "id": "duplicate-window-10m",
+          "bicep_regex": "duplicateDetectionHistoryTimeWindow: 'PT10M'",
+          "terraform_regex": "variable\\s+\"duplicate_detection_history_time_window\"[\\s\\S]{0,400}default\\s*=\\s*\"PT10M\""
+        }
+      ]
+    },
+    {
+      "name": "observability",
+      "bicep": "infra/modules/observability/main.bicep",
+      "terraform": "infra/terraform/modules/observability/main.tf",
+      "bicep_resource_types": [
+        "Microsoft.OperationalInsights/workspaces",
+        "Microsoft.Insights/components"
+      ],
+      "terraform_resource_types": [
+        "azurerm_log_analytics_workspace",
+        "azurerm_application_insights"
+      ],
+      "invariants": [
+        {
+          "id": "log-analytics-sku-pergb",
+          "bicep_regex": "name: 'PerGB2018'",
+          "terraform_regex": "sku\\s*=\\s*\"PerGB2018\""
+        },
+        {
+          "id": "log-retention-30d",
+          "bicep_regex": "retentionInDays: 30",
+          "terraform_regex": "variable\\s+\"log_retention_in_days\"[\\s\\S]{0,300}default\\s*=\\s*30"
+        },
+        {
+          "id": "resource-scoped-log-access",
+          "bicep_regex": "enableLogAccessUsingOnlyResourcePermissions: true",
+          "terraform_regex": "allow_resource_only_permissions\\s*=\\s*true"
+        },
+        {
+          "id": "app-insights-workspace-bound",
+          "bicep_regex": "WorkspaceResourceId: workspace\\.id",
+          "terraform_regex": "workspace_id\\s*=\\s*azurerm_log_analytics_workspace\\.main\\.id"
+        },
+        {
+          "id": "app-insights-kind-web",
+          "bicep_regex": "kind: 'web'",
+          "terraform_regex": "application_type\\s*=\\s*\"web\""
+        }
+      ]
+    },
+    {
+      "name": "apps",
+      "bicep": "infra/modules/apps/portal.bicep",
+      "terraform": "infra/terraform/modules/apps/main.tf",
+      "bicep_resource_types": [
+        "Microsoft.App/managedEnvironments",
+        "Microsoft.App/containerApps"
+      ],
+      "terraform_resource_types": [
+        "azurerm_container_app_environment",
+        "azurerm_container_app"
+      ],
+      "invariants": [
+        {
+          "id": "external-ingress",
+          "bicep_regex": "external: true",
+          "terraform_regex": "external_enabled\\s*=\\s*true"
+        },
+        {
+          "id": "ingress-target-port-3000",
+          "bicep_regex": "targetPort: 3000",
+          "terraform_regex": "target_port\\s*=\\s*var\\.target_port"
+        },
+        {
+          "id": "no-insecure-http",
+          "bicep_regex": "allowInsecure: false",
+          "terraform_regex": "allow_insecure_connections\\s*=\\s*false"
+        },
+        {
+          "id": "system-assigned-identity",
+          "bicep_regex": "type: 'SystemAssigned'",
+          "terraform_regex": "type\\s*=\\s*\"SystemAssigned\""
+        },
+        {
+          "id": "replica-bounds",
+          "bicep_regex": "minReplicas: 1",
+          "terraform_regex": "min_replicas\\s*=\\s*var\\.min_replicas"
+        },
+        {
+          "id": "replica-ceiling",
+          "bicep_regex": "maxReplicas: 3",
+          "terraform_regex": "max_replicas\\s*=\\s*var\\.max_replicas"
+        },
+        {
+          "id": "cpu-half-core",
+          "bicep_regex": "cpu: json\\('0\\.5'\\)",
+          "terraform_regex": "cpu\\s*=\\s*var\\.container_cpu"
+        },
+        {
+          "id": "memory-1gib",
+          "bicep_regex": "memory: '1\\.0Gi'",
+          "terraform_regex": "memory\\s*=\\s*var\\.container_memory"
+        },
+        {
+          "id": "health-probe-path",
+          "bicep_regex": "path: '/api/health'",
+          "terraform_regex": "path\\s*=\\s*\"/api/health\""
+        },
+        {
+          "id": "liveness-initial-delay",
+          "bicep_regex": "initialDelaySeconds: 15",
+          "terraform_regex": "initial_delay\\s*=\\s*15"
+        },
+        {
+          "id": "readiness-initial-delay",
+          "bicep_regex": "initialDelaySeconds: 5",
+          "terraform_regex": "initial_delay\\s*=\\s*5"
+        },
+        {
+          "id": "consumption-profile",
+          "bicep_regex": "workloadProfileType: 'Consumption'",
+          "terraform_regex": "workload_profile_type\\s*=\\s*\"Consumption\""
+        },
+        {
+          "id": "key-vault-uri-injected",
+          "bicep_regex": "name: 'KEY_VAULT_URI'",
+          "terraform_regex": "name\\s*=\\s*\"KEY_VAULT_URI\""
+        }
+      ]
+    }
+
+
+  ]
+}
