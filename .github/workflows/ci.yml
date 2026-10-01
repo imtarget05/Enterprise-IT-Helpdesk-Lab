@@ -173,6 +173,22 @@ jobs:
           echo "PORT=5099" >> "$GITHUB_ENV"
           echo "HOST=127.0.0.1" >> "$GITHUB_ENV"
 
+      # The interop tests spawn `node -e` with cwd=internal-portal, which
+      # requires internal-portal/node_modules/pg (src/store.js ->
+      # src/postgres-adapter.js). The Node job's `npm ci` runs on a different
+      # runner, so this job must provision Node deps itself or the interop
+      # suite fails with "Cannot find module 'pg'" (3 failures).
+      - name: Setup Node (interop tests spawn the Node store)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: internal-portal/package-lock.json
+
+      - name: Install Node deps for interop (pg)
+        working-directory: internal-portal
+        run: npm ci --no-audit --no-fund
+
       - name: Unittest discovery (stdlib) — Flask isolation + RAG cache
         working-directory: internal-portal/python-portal
         run: python -m unittest discover -s . -p 'test_*.py' -v
