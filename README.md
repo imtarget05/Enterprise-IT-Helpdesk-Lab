@@ -121,7 +121,7 @@ Mỗi ticket trong `tickets/` viết theo khung chuẩn ITIL:
 
 ## Tại sao làm dự án này?
 
-Dự án nhắm vào vị trí **IT Helpdesk / IT Support / Junior SysAdmin** tại doanh nghiệp vừa và nhỏ — đặc biệt là môi trường dùng Windows Server và Active Directory.
+Dự án nhắm vào nghiệp vụ **IT Helpdesk / Internal IT Support** tại doanh nghiệp vừa và nhỏ — đặc biệt là môi trường dùng Windows Server và Active Directory. Cách em làm là **ứng dụng nội bộ có AI hỗ trợ** (hướng ứng tuyển: **AI Application Engineer**), không phải quản trị hệ thống thuần; hạ tầng Windows/AD ở đây là bối cảnh vận hành mà ứng dụng phải phục vụ.
 
 Công việc Helpdesk hàng ngày bao gồm:
 - 🛠️ Tiếp nhận và xử lý sự cố người dùng (mạng, máy tính, email, tài khoản)

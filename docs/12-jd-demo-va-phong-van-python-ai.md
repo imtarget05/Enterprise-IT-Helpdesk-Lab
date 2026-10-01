@@ -133,7 +133,7 @@ curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:5000/api/trace/FG-RU
 > **Bằng chứng:** `tickets/ticket-002-cannot-resolve-dns.md`.
 
 ### 6. "Chưa đủ 1–2 năm kinh nghiệm?"
-> "Em trung thực là fresher, chưa đi làm chính thức. Bù lại em đã **tự thực hành
+> "Em nói thẳng: em là người mới vào nghề, chưa có kinh nghiệm làm chính thức tại doanh nghiệp, và em ứng tuyển hướng **AI Application Engineer**. Bù lại em đã **tự thực hành
 > đúng đầu việc của vị trí**: CRUD app nội bộ, gọi AI API có fallback,
 > viết tài liệu user, xử lý 20 kịch bản sự cố chuẩn ITIL — tất cả chạy được,
 > test được, demo được ngay hôm nay. Em học nhanh và làm độc lập tốt,
