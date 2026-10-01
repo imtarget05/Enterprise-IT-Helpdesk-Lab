@@ -13,12 +13,13 @@ rule        : no number appears below unless it was measured here, or is explici
 | Field | Value |
 |---|---|
 | remote | `https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab.git` |
-| **canonical ref (`origin/main`)** | `f9dab7dfb0538f7730079ad0e67890a001a60c11` |
-| local `HEAD` | `f8f5fed3c036c75768eeb788c1ebcff76f9f189d` (branch `main`) |
-| drift vs origin | **DIVERGENT: +2 ahead / −1 behind** |
+| **canonical ref (`origin/main`)** | `a235165` (post-cleanup; the CD image-digest commit on top of the cleanup merge `f976d9b`) |
+| local `HEAD` | not canonical — see drift row |
+| drift vs origin | `origin/main` is canonical; local `main` is stale and must not be quoted |
 | worktree | **CLEAN** |
+| Render purge | **DONE** — `internal-portal/render.yaml` + `.github/workflows/keepalive.yml` deleted in PR #1 (merge `f976d9b`); anti-Render gate `internal-portal/python-portal/tests/test_hygiene_no_render.py` (5 tests) merged; `origin/main` tree has **zero** `render.yaml`/`keepalive*` artifacts |
 
-**Blocker before freezing this baseline:** the branch has **diverged** from `origin/main`. The pushed commit `f9dab7d` (`chore: record portal image digest for 3711ddc…`) is *not* in the local tree. Any ledger built on local `HEAD` alone is incomplete. Reconcile (rebase/merge) before Phase 1.
+**Prior blocker RESOLVED:** this ledger previously recorded the branch as DIVERGENT from `origin/main` (`+2 ahead / −1 behind`). That divergence is closed — the Render cleanup landed through PR #1 and `origin/main` is reconciled. CI on the cleanup merge was **green** (run `36915930137`, 12/12 jobs; `origin/main` push run `36916520333` also green). CI-measured python-portal suite: **90 tests OK** (85 baseline + 5 anti-Render gate).
 
 ## 2. Infrastructure as deployed today
 
@@ -30,7 +31,7 @@ rule        : no number appears below unless it was measured here, or is explici
 | parameters | `infra/parameters/{dev,prod}.bicepparam` |
 | invariant checker | `infra/check_invariants.py` |
 | validation | `infra/validate.sh`, `infra/bicepconfig.json` |
-| CI | `.github/workflows/iac-validate.yml` *(also: `ci.yml`, `ci-live.yml`, `build-container.yml`, `keepalive.yml`, `llm-gateway.yml`)* |
+| CI | `.github/workflows/iac-validate.yml` *(also: `ci.yml`, `ci-live.yml`, `build-container.yml`, `llm-gateway.yml`; `keepalive.yml` removed in the Render cleanup)* |
 
 ## 3. Verified seams present in source
 
