@@ -1,7 +1,7 @@
 # ADR-0001: In-Memory Store with File Backup vs Full DB for a Lab Portal
 
-- **Status:** Accepted
-- **Date:** 2026-09-27
+- **Status:** Superseded by [ADR-0002](0002-migrate-to-postgresql-distributed-state.md)
+- **Date:** 2026-09-27 (Superseded 2026-10-01)
 
 ## Context
 

@@ -1,0 +1,35 @@
+name: IaC Validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/iac-validate.yml'
+  pull_request:
+    paths:
+      - 'infra/**'
+      - '.github/workflows/iac-validate.yml'
+
+jobs:
+  validate:
+    name: Compile, lint, test Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Bicep CLI
+        run: |
+          curl -Lo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x bicep
+          sudo mv bicep /usr/local/bin/bicep
+          bicep --version
+
+      - name: Run validation harness
+        run: bash infra/validate.sh
