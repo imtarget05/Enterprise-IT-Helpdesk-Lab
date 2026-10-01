@@ -37,6 +37,7 @@ const crypto = require('node:crypto');
 
 const { seedData } = require('./seed');
 const { normalizeAssetRecord, normalizeTicketRecord } = require('./itsm');
+const { PostgresStoreAdapter } = require('./postgres-adapter');
 
 function defaultCollections() {
   return Object.fromEntries(COLLECTIONS.map((key) => [key, []]));
@@ -57,6 +58,8 @@ function createStore(options = {}) {
   const file = path.join(dataDir, 'db.json');
   const journalFile = `${file}.journal`;
   const seed = options.seed || seedData;
+  const databaseUrl = options.databaseUrl || process.env.DATABASE_URL;
+  const pgAdapter = databaseUrl ? new PostgresStoreAdapter(databaseUrl, COLLECTIONS, seed) : null;
 
   const store = {
     dataDir,
@@ -67,6 +70,7 @@ function createStore(options = {}) {
     seeded: false,
     lastLoadedAt: null,
     writeChain: Promise.resolve(),
+    isPostgres: Boolean(pgAdapter),
   };
 
   async function readSnapshot() {
@@ -88,6 +92,13 @@ function createStore(options = {}) {
   }
 
   store.load = async function load() {
+    if (pgAdapter) {
+      store.data = await pgAdapter.load();
+      store.data.assets = (store.data.assets || []).map(normalizeAssetRecord);
+      store.data.tickets = (store.data.tickets || []).map((ticket) => normalizeTicketRecord(ticket));
+      store.lastLoadedAt = nowIso();
+      return store.data;
+    }
     await fs.mkdir(dataDir, { recursive: true });
     await recoverJournal();
     const snapshot = await readSnapshot();
@@ -205,6 +216,10 @@ function createStore(options = {}) {
   }
 
   async function persist() {
+    if (pgAdapter) {
+      await pgAdapter.persist(store.data);
+      return 'postgres';
+    }
     const payload = JSON.stringify(
       { version: 1, schemaVersion: SCHEMA_VERSION, updatedAt: nowIso(), ...store.data },
       null,
@@ -241,6 +256,12 @@ function createStore(options = {}) {
   /** Chờ mọi thao tác ghi đĩa xong (dùng khi graceful shutdown / test). */
   store.flush = function flush() {
     return store.writeChain;
+  };
+
+  store.close = async function close() {
+    if (pgAdapter) {
+      await pgAdapter.close();
+    }
   };
   /** Seams cho test journal (không dùng trong production code). */
   store.recoverJournal = recoverJournal;
