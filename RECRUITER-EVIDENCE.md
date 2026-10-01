@@ -8,4 +8,14 @@ Evidence:
 - `tickets/ticket-001..020.md` + `scenarios/factory/scenario-01..12.md` corpus thật
 - `GET /metrics` cả 3 service, 4 jobs Prometheus, Grafana/SLO, `test/` 336/337 tests pass (2026-09-30 measured)
 - `docs/01-lab-topology-vmware.md` … `11-minierp-integration.md` SOP lab thật
-Demo: `docker compose up` → POST ticket → `/api/ai/analyze` → agent đề xuất → approve → ticket đóng.
+- **Live Azure Deployment:** Azure Container Apps (East Asia, `rg-portfolio-evidence`, `ca-helpdesk-portal`)
+  - **FQDN:** `https://ca-helpdesk-portal.wittysand-b748274c.eastasia.azurecontainerapps.io`
+  - **Revision:** `ca-helpdesk-portal--0000001` (pinned GHCR image digest: `sha256:d9eb0b9a25cb8d757c7c47b3d2aad4d667346f0761f43e27f87ba137d4f7fe77`)
+  - **Verification:**
+    - `GET /api/health` → `200 OK` (`status: "ok"`, `authMode: "lab"`, `seeded: true`, 6 assets, 6 tickets)
+    - `POST /api/auth/login` → `200 OK` with Bearer token
+    - `GET /api/tickets` + `GET /api/assets` → `200 OK` (role-authenticated)
+    - `POST /api/ai/analyze` → `200 OK` with ITIL rule-based diagnosis and docs RAG
+Demo:
+- **Cloud:** `curl https://ca-helpdesk-portal.wittysand-b748274c.eastasia.azurecontainerapps.io/api/health`
+- **Local:** `docker compose up` → POST ticket → `/api/ai/analyze` → agent đề xuất → approve → ticket đóng.
