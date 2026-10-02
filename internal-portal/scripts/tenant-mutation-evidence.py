@@ -16,6 +16,9 @@ from pathlib import Path
 
 PORTAL = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
 SUITE = PORTAL / "test" / "tenant-isolation.test.js"
+# The agent-tool scoping (M7/M8) lives in a different suite; running both under
+# every mutation means a control is credited only when it actually bites.
+SUITES = [SUITE, PORTAL / "test" / "agent-runtime.test.js"]
 
 MUTATIONS = [
     (
@@ -60,12 +63,26 @@ MUTATIONS = [
         "        tenant: normalizeTenant(req.user.tenant),\n        requester: str(req.user.username),\n      });\n      res.json(result);",
         "        tenant: str(body.tenant) || 'default',\n        requester: str(req.user.username),\n      });\n      res.json(result);",
     ),
+    (
+        "M7",
+        "agent's search_tickets reads the whole store again (side door around the HTTP filter)",
+        "src/agent/tools.js",
+        "        const rows = rowsVisibleTo(store.data.tickets || [], ctx && ctx.user ? ctx : null).filter((t) => {",
+        "        const rows = (store.data.tickets || []).filter((t) => {",
+    ),
+    (
+        "M8",
+        "agent's requireTicket reads any ticket by id again",
+        "src/agent/tools.js",
+        "    const caller = ctx && ctx.user ? ctx : null;\n    const hit = findVisible(store.data.tickets || [], caller, id);",
+        "    const hit = { found: true, row: store.find('tickets', id) };",
+    ),
 ]
 
 
-def run_suite() -> tuple[int, int, str]:
+def run_suite(suite: Path) -> tuple[int, int, str]:
     proc = subprocess.run(
-        ["node", "--test", str(SUITE)],
+        ["node", "--test", str(suite)],
         cwd=PORTAL, capture_output=True, text=True,
     )
     passed = failed = -1
@@ -78,9 +95,13 @@ def run_suite() -> tuple[int, int, str]:
 
 
 def main() -> int:
-    baseline_pass, baseline_fail, _ = run_suite()
-    print(f"BASELINE  pass={baseline_pass} fail={baseline_fail}")
-    if baseline_fail != 0:
+    total_pass = total_fail = 0
+    for suite in SUITES:
+        p, f, _ = run_suite(suite)
+        total_pass += max(p, 0)
+        total_fail += max(f, 0)
+    print(f"BASELINE  pass={total_pass} fail={total_fail}  ({len(SUITES)} suites)")
+    if total_fail != 0:
         print("FAIL: baseline is not green, mutation results would be meaningless")
         return 1
 
@@ -96,11 +117,14 @@ def main() -> int:
         backup.write_text(original)
         try:
             path.write_text(original.replace(old, new, 1))
-            passed, failed, _ = run_suite()
+            failed = 0
+            for suite in SUITES:
+                _, f, _ = run_suite(suite)
+                failed += max(f, 0)
             caught = failed > 0
             all_caught = all_caught and caught
             verdict = "CAUGHT" if caught else "SURVIVED <-- control is hollow"
-            print(f"{tag}  {verdict}  pass={passed} fail={failed}  {description}")
+            print(f"{tag}  {verdict}  fails={failed}  {description}")
         finally:
             path.write_text(original)
             assert path.read_bytes() == backup.read_bytes(), f"{rel} was not restored byte-for-byte"

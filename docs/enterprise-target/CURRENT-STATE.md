@@ -107,7 +107,17 @@ Two design points worth naming:
 
 ### 4c. The tenant control caught its own hollow test
 
+**A side door was still open.** Scoping only the HTTP routes would have left the
+agent able to read the same rows: `agent/tools.js` `requireTicket`,
+`search_tickets` and `search_assets` read the store directly, and the
+orchestrator's `run()` did not even put `tenant` into the tool context (only
+`approve()` did). So the agent could return any ticket or asset the HTTP filter
+had just refused. Both are now tenant-scoped, and a tool call **without** a
+caller returns nothing rather than everything — an unscoped agent read fails
+closed.
+
 Mutation evidence: `internal-portal/scripts/tenant-mutation-evidence.py`
+(2 suites, baseline 49 pass / 0 fail)
 
 | | Mutation | Result |
 |---|---|---|
@@ -117,6 +127,8 @@ Mutation evidence: `internal-portal/scripts/tenant-mutation-evidence.py`
 | M4 | single-row tenant equality check removed | **CAUGHT** (3 fails) |
 | M5 | created rows no longer stamped with the caller tenant | **CAUGHT** (5 fails) |
 | M6 | AI agent route reads tenant from the request body again | **CAUGHT** (1 fail) — *after the test was rewritten* |
+| M7 | agent `search_tickets` reads the whole store again | **CAUGHT** (1 fail) |
+| M8 | agent `requireTicket` reads any ticket by id again | **CAUGHT** (2 fails) |
 
 The first version of the M6 assertion only grepped the agent's response body for
 the tenant string. The agent does not echo it back, so **M6 SURVIVED** — a

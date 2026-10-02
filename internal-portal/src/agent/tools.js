@@ -74,18 +74,35 @@ const assetDigest = (a) => ({
  * instance server đang dùng, nên đọc/ghi luôn nhất quán với REST API.
  */
 function createToolRegistry(options = {}) {
+  // Tenant scoping for every tool that reads the store. Without it the agent
+  // could read any ticket or asset, making the HTTP tenant filter a side door.
+  const { rowsVisibleTo, findVisible } = require('../tenant-scope');
+
   const store = options.store;
   if (!store) throw new Error('createToolRegistry cần options.store');
 
-  /** Tìm ticket theo id — dùng chung cho mọi tool thao tác lên ticket. */
-  const requireTicket = (id) => {
-    const row = store.find('tickets', id);
-    if (!row) {
+  /**
+   * Tìm ticket theo id — dùng chung cho mọi tool thao tác lên ticket.
+   *
+   * Tenant-scoped: `ctx.tenant` is the tenant the agent is running under (the
+   * session tenant, threaded in by the orchestrator). Without it the agent could
+   * read ANY ticket by id, which would make the HTTP tenant filter a side door:
+   * the same data, reachable through the agent.
+   *
+   * A row owned by another tenant is reported as absent (404), never as 403 —
+   * "exists but not yours" is itself a disclosure.
+   */
+  const requireTicket = (id, ctx) => {
+    // A ctx without a tenant (and without a user) yields `null`, which finds
+    // nothing: an unscoped agent read must fail closed, not fall back to "all".
+    const caller = ctx && ctx.user ? ctx : null;
+    const hit = findVisible(store.data.tickets || [], caller, id);
+    if (!hit.found) {
       const e = new Error(`Ticket ${str(id)} không tồn tại.`);
       e.status = 404;
       throw e;
     }
-    return row;
+    return hit.row;
   };
 
   const tools = [
@@ -102,11 +119,11 @@ function createToolRegistry(options = {}) {
         },
         required: [],
       },
-      async handler({ args }) {
+      async handler({ args, ctx }) {
         const q = str(args.q).toLowerCase();
         const status = str(args.status).toLowerCase();
         const priority = str(args.priority).toLowerCase();
-        const rows = (store.data.tickets || []).filter((t) => {
+        const rows = rowsVisibleTo(store.data.tickets || [], ctx && ctx.user ? ctx : null).filter((t) => {
           if (q && !JSON.stringify(t).toLowerCase().includes(q)) return false;
           if (status) {
             const a = str(t.status).toLowerCase();
@@ -139,8 +156,8 @@ function createToolRegistry(options = {}) {
         properties: { id: { type: 'string', description: 'Mã ticket (số)' } },
         required: ['id'],
       },
-      async handler({ args }) {
-        const row = requireTicket(args.id);
+      async handler({ args, ctx }) {
+        const row = requireTicket(args.id, ctx);
         const sla = calculateSla(row.priorityCode, row.openedAt);
         const remainingMinutes = Math.round((new Date(sla.resolveTargetAt).getTime() - Date.now()) / 60000);
         return {
@@ -169,10 +186,10 @@ function createToolRegistry(options = {}) {
         },
         required: [],
       },
-      async handler({ args }) {
+      async handler({ args, ctx }) {
         const who = str(args.assignedTo).toLowerCase();
         const tag = str(args.assetTag).toLowerCase();
-        const rows = (store.data.assets || []).filter((a) => {
+        const rows = rowsVisibleTo(store.data.assets || [], ctx && ctx.user ? ctx : null).filter((a) => {
           if (who && str(a.assignedTo).toLowerCase() !== who) return false;
           if (tag && str(a.assetTag).toLowerCase() !== tag && str(a.tag).toLowerCase() !== tag) return false;
           return true;
@@ -255,8 +272,8 @@ function createToolRegistry(options = {}) {
         },
         required: ['ticketId', 'note'],
       },
-      async handler({ args }) {
-        const ticket = requireTicket(args.ticketId);
+      async handler({ args, ctx }) {
+        const ticket = requireTicket(args.ticketId, ctx);
         const note = compact(args.note, 2000);
         if (!note) {
           const e = new Error('Work note rỗng.');

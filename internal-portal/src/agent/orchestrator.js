@@ -212,7 +212,10 @@ function createOrchestrator(options = {}) {
       const toolName = str(plan.nextTool);
       if (toolName && tools.isAutoAllowed(toolName)) {
         const args = plan.args && typeof plan.args === 'object' ? plan.args : {};
-        const outcome = await tools.invoke(toolName, args, { store, requester, user, fetchImpl });
+        // `tenant` MUST be in ctx: the tools that read tickets/assets scope
+        // themselves by it. Omitting it here made every agent run read the
+        // whole store regardless of who asked.
+        const outcome = await tools.invoke(toolName, args, { store, requester, user, tenant, fetchImpl });
         trace.push({ step, phase: 'act', tool: toolName, ok: outcome.ok, args });
         observations.push(outcome.ok
           ? `[${toolName}] ${sanitizeContext(JSON.stringify(outcome.result))}`
