@@ -86,3 +86,92 @@ Wave B plan: typed MCP read tools that inherit tenant from the authenticated
 context, `knowledge.search` delegating to the Wave A RAG boundary (never a second
 retrieval path), and a single `automation.propose` write tool with no
 `automation.execute`.
+
+---
+
+# CHECKPOINT — Waves A and B merged
+
+## MAIN
+
+`6024b3a` — `feat(mcp): typed MCP tools with a proposal-only write surface (#9)`
+No open PRs.
+
+## PR #7 / #8 / #9
+
+All MERGED (squash).
+
+- #7 → `9315ab8` durable queue + deterministic worker
+- #8 → `b358146` RAG tenant-safe retrieval
+- #9 → `6024b3a` typed MCP tools
+
+## RAG
+
+- candidate tenant filter: BEFORE rank (line 246 vs 260)
+- Qdrant: filtered
+- missing tenant: fails closed
+- whitespace tenant: caught (M-R7)
+- analyze bypass: caught (M-R8, via tenant-isolation.test.js)
+- citations: content-derived chunkId + CORPUS_VERSION
+- untrusted framing: each element asserted separately
+
+PRODUCTION PRIVATE CORPUS: **NOT_VERIFIED** — every real corpus file is
+`__shared__`; denial proven with controlled fixtures only.
+
+RAG QUALITY: **NOT_MEASURED** — Recall@K, Precision@K, MRR, faithfulness,
+citation correctness and abstention all outstanding.
+
+## MCP (Wave B)
+
+- inventory: 5 read tools + 1 write tool
+- tenant context: frozen, built once from the session, never an argument
+- read tools: `ticket.get`, `ticket.search`, `asset.get`, `asset.search`,
+  `knowledge.search`
+- `knowledge.search`: delegates to the Wave A retrieval entry point
+- `automation.propose`: typed, catalogued action, risk from catalog not model
+- `automation.execute` exposed: **NO** — absent, and the registry refuses to
+  construct if any tool name looks like an execution path
+- raw command field: **ABSENT** — rejected by schema validation
+- RBAC: `AUTOMATION_ROLES` from the catalog, taken from the session role
+- risk/HITL: HIGH_RISK reports `requiresApproval: true`; IT_ADMIN gets no bypass
+- audit: tenant, actor, tool, arg SHAPES (lengths only, never values),
+  correlation id, outcome
+- read/write modules separate, asserted by import inspection
+
+## Defects found in Wave B's own code
+
+1. `createMcpContext` used `normalizeTenant`, which maps `''` → DEFAULT_TENANT.
+   A whitespace tenant became a real scope instead of being refused — the same
+   fail-open class Wave A closed in `retrieve()`.
+2. `query` on the forbidden-field list broke the search tools. Raw SQL is
+   blocked by `sql`/`raw_sql`/`rawsql`; a search term carries no authority.
+3. `canonicalize` returns a JSON string, so proposals came back as an opaque blob
+   with no addressable authority fields.
+
+## Evidence discipline
+
+Two MCP mutations initially SURVIVED, both the harness's fault: M-MCP1 mutated
+nothing, and M-MCP4 removed a factory call whose helper the test invoked
+directly. Both rewritten to mutate real behaviour; a new test poisons the
+registry to pin where the guard actually runs.
+
+Carried from Wave A: a mutation is only evidence about itself when it is the
+ONLY difference from baseline. Restoration happens immediately after each
+mutation, and a non-zero exit never counts as a catch without an assertion.
+
+## Measured
+
+- Node: **530 tests, 523 pass, 7 skip, 0 fail**
+- PostgreSQL 16 lifecycle: 6/6 (container torn down; requires `LIFECYCLE_PG_URL`)
+- llm-gateway: 71 passed, 4 xfailed
+- RAG mutation: **8/8 caught**
+- MCP mutation: **8/8 caught**
+- CI: ALL REPO-OWNED REQUIRED JOBS GREEN on every merged PR.
+  SONARCLOUD: EXTERNAL_BLOCKER.
+
+## NEXT
+
+Wave C — governed worker durability: crash-window tests for the four windows
+(before queue, after queue before ACK, after execute before durable completion,
+after success before ACK), duplicate-delivery handling, measured by counting
+executor calls rather than status codes. The durable queue is still file-backed;
+the Service Bus adapter follows the same interface.
