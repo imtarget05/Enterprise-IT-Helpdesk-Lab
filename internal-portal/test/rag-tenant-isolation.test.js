@@ -114,6 +114,14 @@ describe('RAG corpus tenant classification', () => {
       assert.ok(c.chunkId, `chunk ${c.source} has no chunkId`);
       assert.equal(c.version, CORPUS_VERSION);
     }
+  });
+
+  test('chunkId is stable across re-indexing of identical text', () => {
+    const text = '# T\n\n## S\n\nstable body';
+    assert.equal(chunkMarkdown(text, 'docs/y.md', 'acme')[0].chunkId, chunkMarkdown(text, 'docs/y.md', 'acme')[0].chunkId);
+  });
+});
+
 describe('RAG candidate-set filtering (not retrieve-then-filter)', () => {
   const { chunks, vecs } = corpus([
     [SHARED_TENANT, 'shared incident triage procedure'],
@@ -291,13 +299,6 @@ describe('RAG tenant filter on the external vector store path', () => {
   test('empty hits render nothing rather than an empty labelled region', () => {
     assert.equal(formatContext([]), '');
     assert.equal(formatContext(null), '');
-  });
-});
-  });
-
-  test('chunkId is stable across re-indexing of identical text', () => {
-    const text = '# T\n\n## S\n\nstable body';
-    assert.equal(chunkMarkdown(text, 'docs/y.md', 'acme')[0].chunkId, chunkMarkdown(text, 'docs/y.md', 'acme')[0].chunkId);
   });
 });
 
