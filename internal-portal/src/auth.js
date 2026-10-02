@@ -2,6 +2,25 @@
 
 const crypto = require('node:crypto');
 
+/**
+ * Auth modes — the honest part of this file.
+ *
+ *   'lab'        real session tokens (Bearer), lab identity. This is what the
+ *                test-suite and the lab deployment use explicitly.
+ *   'enterprise' same token mechanics as 'lab', but FAIL-CLOSED: constructing
+ *                without any configured user THROWS (there must be no
+ *                anonymous-privileged path), and the legacy bypass is refused.
+ *   'legacy'     historical demo shortcut: every request becomes IT_ADMIN.
+ *                It is KEPT ONLY for the local lab/dev loop and it is REFUSED
+ *                when the process claims to be production.
+ *
+ * A server that would silently run 'legacy' in production is a configuration
+ * defect that must break startup, not a runtime choice that gets discovered
+ * after a privileged request. That is the whole point of this gate.
+ */
+
+const MODES = Object.freeze({ LEGACY: 'legacy', LAB: 'lab', ENTERPRISE: 'enterprise' });
+
 const ROLES = Object.freeze({
   IT_ADMIN: 'IT_ADMIN',
   HELPDESK_L1: 'HELPDESK_L1',
@@ -55,9 +74,33 @@ function safeEqual(left, right) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+function resolveMode(options = {}) {
+  const raw = String(options.authMode || process.env.AUTH_MODE || 'legacy').toLowerCase();
+  const nodeEnv = String(options.nodeEnv || process.env.NODE_ENV || '').toLowerCase();
+  const allowLegacy = String(
+    options.allowLegacyAuth !== undefined ? options.allowLegacyAuth : process.env.ALLOW_LEGACY_AUTH || '',
+  ).toLowerCase();
+  if (!Object.values(MODES).includes(raw)) {
+    throw Object.assign(new Error(`unknown AUTH_MODE "${raw}" (expected legacy|lab|enterprise)`), { code: 'AUTH_CONFIG' });
+  }
+  if (raw === MODES.LEGACY && (nodeEnv === 'production' || allowLegacy === 'false')) {
+    throw Object.assign(
+      new Error('legacy auth is refused: every request would become IT_ADMIN (set AUTH_MODE=lab|enterprise)'),
+      { code: 'AUTH_CONFIG' },
+    );
+  }
+  return raw;
+}
+
 function createAuth(options = {}) {
-  const mode = String(options.authMode || process.env.AUTH_MODE || 'legacy').toLowerCase();
+  const mode = resolveMode(options);
   const users = parseUsers(options.authUsers || process.env.LAB_AUTH_USERS);
+  if (mode === MODES.ENTERPRISE && Object.keys(users).length === 0) {
+    throw Object.assign(
+      new Error('enterprise auth is fail-closed: configure at least one user (LAB_AUTH_USERS) before boot'),
+      { code: 'AUTH_CONFIG' },
+    );
+  }
   const sessions = new Map();
   const ttlMs = Number(options.sessionTtlMs || 8 * 60 * 60 * 1000);
   const now = typeof options.now === 'function' ? options.now : () => new Date();
@@ -119,6 +162,7 @@ function createAuth(options = {}) {
   return {
     mode,
     middleware,
+    authenticateRequest,
     requireAuth,
     hasPermission,
     rolePermissions,
@@ -128,4 +172,4 @@ function createAuth(options = {}) {
   };
 }
 
-module.exports = { createAuth, ROLES, PERMISSIONS, ROLE_PERMISSIONS, rolePermissions };
+module.exports = { createAuth, resolveMode, MODES, ROLES, PERMISSIONS, ROLE_PERMISSIONS, rolePermissions };

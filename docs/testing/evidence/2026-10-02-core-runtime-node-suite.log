@@ -1,0 +1,615 @@
+
+> enterprise-it-asset-portal@2.0.0 test
+> node --test --test-timeout=120000 --test-force-exit test/*.test.js
+
+▶ PostgreSQL lifecycle store (real database)
+  ✔ migrations apply once and are recorded (36.35075ms)
+  ✔ NEGATIVE CONTROL: the unique index rejects a duplicate idempotency key (58.526375ms)
+  ✔ NEGATIVE CONTROL: two replicas racing the same message execute once (118.514917ms)
+  ✔ approval is durable across a pool replacement, and replayed delivery is blocked (141.426375ms)
+  ✔ NEGATIVE CONTROL: a high-risk proposal forced to QUEUED in SQL still needs approval (53.114458ms)
+  ✔ the persisted audit trail is queryable by proposal (121.057917ms)
+✔ PostgreSQL lifecycle store (real database) (530.135958ms)
+▶ action catalog parity
+  ✔ Node ACTION_RISK matches llm-gateway/automation/policy.py exactly (2.697583ms)
+  ✔ Node catalog covers exactly the Python SUPPORTED_ACTIONS (4.278833ms)
+  ✔ raw-command fields are rejected and never accepted as parameters (0.482333ms)
+✔ action catalog parity (8.601708ms)
+▶ propose — authorization is deterministic
+  ✔ low-risk action is auto-authorized and needs no approval (3.157333ms)
+  ✔ high-risk action parks at APPROVAL_PENDING and is not queueable (0.349209ms)
+  ✔ a hidden command field makes the whole proposal INVALID (no row created) (0.208042ms)
+  ✔ unknown action id is rejected, not coerced (0.138375ms)
+  ✔ unauthenticated actor is denied (0.116333ms)
+  ✔ roles that may not propose automation are denied (0.219792ms)
+✔ propose — authorization is deterministic (4.4305ms)
+▶ approval — append-only, separation of duties, durable
+  ✔ the proposer cannot approve their own action (0.368708ms)
+  ✔ a role without approval authority cannot decide (0.171041ms)
+  ✔ a second administrator can approve and the decision is recorded (0.205083ms)
+  ✔ a decision is append-only: a later decision is refused (0.137125ms)
+  ✔ a rejected proposal can never be queued or executed (0.387ms)
+  ✔ NEGATIVE CONTROL: a queued high-risk action with no approval row is blocked at the gate (0.122625ms)
+✔ approval — append-only, separation of duties, durable (1.508584ms)
+▶ execute — idempotency, post-check, bounded retry
+  ✔ low-risk path: queue then execute once, ending POSTCHECKED (0.328417ms)
+  ✔ NEGATIVE CONTROL: two simultaneous deliveries execute exactly once (0.214667ms)
+  ✔ NEGATIVE CONTROL: a re-delivery after success is blocked (0.180917ms)
+  ✔ DURABILITY: approval + idempotency survive a process restart (file-backed store) (6.710084ms)
+  ✔ a failed post-check is not a success (0.364917ms)
+✔ execute — idempotency, post-check, bounded retry (7.915166ms)
+▶ failure handling — transient vs permanent, bounded attempts
+  ✔ a transient failure asks for retry within budget (0.34075ms)
+  ✔ a transient failure at the attempt ceiling is dead-lettered (0.38525ms)
+  ✔ a permanent failure never retries (0.22475ms)
+  ✔ classifyFailure separates transient from permanent (0.06675ms)
+✔ failure handling — transient vs permanent, bounded attempts (1.307959ms)
+▶ executor authority and audit integrity
+  ✔ NEGATIVE CONTROL: a forged persisted role cannot gain execution authority (4.426333ms)
+  ✔ the queue message carries identifiers only — no command, no parameters (0.189625ms)
+  ✔ the audit trail covers the full lifecycle in order (0.214875ms)
+  ✔ NEGATIVE CONTROL: audit rows never contain credential-shaped values (0.183083ms)
+  ✔ redact() masks secret-looking keys and values, keeping structure (0.05575ms)
+  ✔ the state machine refuses illegal transitions (0.264125ms)
+  ✔ an unknown proposal id is a poison message, not a crash (0.047792ms)
+✔ executor authority and audit integrity (5.508208ms)
+✔ tools.js: invoke tool ghi KHÔNG có ctx.approved thì bị chặn, không ghi gì (95.044625ms)
+✔ tools.js: invoke tool ghi với ctx.approved mới ghi dữ liệu thật (94.766583ms)
+✔ tools.js: isAutoAllowed chỉ true cho tool đọc, tool ghi luôn false (62.858167ms)
+✔ guardrails: approval gate đóng băng args, chặn replay, tôn trọng TTL (1.525833ms)
+✔ orchestrator: hành động ghi chỉ được ĐỀ XUẤT, chưa ghi — approve mới ghi (173.604875ms)
+✔ orchestrator: token duyệt chỉ dùng được một lần (chống replay tạo ticket trùng) (124.871792ms)
+✔ orchestrator: LLM tự chọn tool ghi vẫn bị chặn, không chạy âm thầm (85.010375ms)
+✔ guardrails: input chặn prompt injection (tiếng Việt và tiếng Anh) (0.594625ms)
+✔ guardrails: input chặn rỗng, quá dài, ký tự điều khiển (0.146083ms)
+✔ guardrails: output lọc secret, cắt độ dài, bắt buộc có căn cứ (0.479167ms)
+✔ memory: LTM chỉ học từ câu tự khai, không tự bịa từ nội dung ticket (0.21325ms)
+✔ memory: LTM tách theo (user, tenant) — không rò chéo người dùng (0.32775ms)
+✔ memory: LTM dedupe, ltmEnabled=false thì mọi thao tác là no-op (0.124917ms)
+✔ memory: session lưu lịch sử và rút gọn theo ngân sách ký tự (0.100667ms)
+✔ memory: LTM sống sót qua restart thật (ghi/đọc file agent-memory.json) (107.909666ms)
+✔ orchestrator: vòng lặp PLAN→ACT→OBSERVE ghi đủ trace và trả evidence (224.644292ms)
+✔ orchestrator: LLM điều khiển vòng lặp — bước 1 gọi tool, bước 2 trả lời (66.339958ms)
+✔ orchestrator: LLM hỏng JSON thì rơi về rule-based, không throw ra ngoài (63.730833ms)
+✔ orchestrator: LLM ném lỗi mạng thì fallback rule-based, không 500 (90.40225ms)
+✔ orchestrator: dừng sau maxSteps, không lặp vô hạn khi LLM cứ chọn tool (110.106167ms)
+✔ orchestrator: giữ nguyên guardrail khi chạy vòng lặp (injection bị chặn) (97.24175ms)
+✔ orchestrator: học ký ức dài hạn từ lời người dùng trong lượt đó (63.079625ms)
+✔ orchestrator: parseAgentJson chịu được model bọc markdown (0.244375ms)
+✔ tools: search_tickets lọc theo từ khoá và ưu tiên ticket mức cao trước (63.455875ms)
+✔ tools: get_ticket trả chi tiết + SLA; ticket không tồn tại trả not_found (52.00675ms)
+✔ tools: invoke tên tool không tồn tại trả unknown_tool, không throw (110.839625ms)
+✔ tools: create_ticket chuẩn hoá priority/category, không ghi rác (177.0995ms)
+[api] GET /api/ai/agent/status → 200
+✔ GET /api/ai/agent/status — báo cáo tool, engine và policy side-effect (67.179375ms)
+[api] POST /api/ai/agent → 200
+✔ POST /api/ai/agent — câu hỏi chỉ đọc trả 200 với status answered (51.715125ms)
+[api] POST /api/ai/agent → 400
+✔ POST /api/ai/agent — thiếu question trả 400 với chi tiết lỗi (48.371125ms)
+[api] GET /api/tickets → 200
+[api] POST /api/ai/agent → 200
+[api] GET /api/tickets → 200
+✔ POST /api/ai/agent — hành động ghi trả needs_approval, chưa tạo ticket (87.288916ms)
+[api] POST /api/ai/agent → 200
+✔ POST /api/ai/agent — prompt injection bị chặn, trả blocked chứ không 500 (52.994083ms)
+[api] POST /api/ai/agent → 200
+[api] GET /api/tickets → 200
+[api] POST /api/ai/agent/approve → 200
+[api] GET /api/tickets → 200
+[api] POST /api/ai/agent/approve → 404
+✔ POST /api/ai/agent/approve — duyệt thì ticket thực sự được tạo (131.68725ms)
+[api] POST /api/ai/agent/approve → 400
+[api] POST /api/ai/agent/approve → 404
+✔ POST /api/ai/agent/approve — thiếu token trả 400, token bịa trả 404 (64.335333ms)
+[api] POST /api/ai/agent → 200
+[api] GET /api/tickets → 200
+[api] POST /api/ai/agent/approve → 200
+[api] POST /api/ai/agent/approve → 404
+[api] GET /api/tickets → 200
+✔ POST /api/ai/agent/approve — approved=false từ chối và huỷ token (92.701083ms)
+[api] POST /api/ai/agent → 200
+[api] POST /api/ai/agent → 200
+✔ agent: cùng session giữ lịch sử và ký ức giữa các lượt (83.938084ms)
+[api] POST /api/ai/agent → 200
+✔ agent: LTM được ghi xuống dataDir, không chỉ nằm trong RAM (87.989125ms)
+(node:52063) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/ai-adversarial.test.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ ai-adversarial: prompt injection in ticket content is safely neutralized (0.918ms)
+﹣ ai-adversarial: live gateway prompt injection test (0.207042ms) # LIVE_TESTS!=1, skipping live adversarial LLM test
+[api] GET /api/ai/status → 200
+✔ GET /api/ai/status — Ollama không chạy → engine rule-based, không 500 (199.025791ms)
+[api] GET /api/ai/status → 200
+✔ GET /api/ai/status — Ollama chạy (fake) → engine ollama + list model (74.350875ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #1007 HIGH • Máy không có Internet, ipconfig báo IP APIPA 169.254 • Nguyen Thi Mai (Accounting) • NETWORK • 2026-10-02 08:40:45
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1007 HIGH • Máy không có Internet, ipconfig báo IP... to=it-team@bmc.local
+[api] POST /api/tickets → 201
+[api] POST /api/ai/analyze → 200
+✔ POST /api/ai/analyze {ticketId} — Ollama không chạy → fallback playbook theo keyword (202.617417ms)
+[api] POST /api/ai/analyze → 200
+✔ POST /api/ai/analyze {title} — input tự do, không cần ticket trong DB (99.960875ms)
+[api] POST /api/ai/analyze → 400
+✔ POST /api/ai/analyze — thiếu ticketId lẫn title → 400 (97.818833ms)
+[api] POST /api/ai/analyze → 404
+✔ POST /api/ai/analyze — ticketId không tồn tại → 404 (172.844125ms)
+[api] POST /api/ai/analyze → 200
+✔ POST /api/ai/analyze — Ollama chạy (fake) → engine ollama, parse JSON analysis (92.304834ms)
+[api] POST /api/ai/analyze → 200
+✔ POST /api/ai/analyze — model trả JSON bọc lẫn lộn → vẫn parse được (52.0845ms)
+[api] POST /api/ai/analyze → 200
+✔ POST /api/ai/analyze — model trả JSON hỏng → fail-soft về rule-based, không 500 (82.128166ms)
+[api] POST /api/ai/analyze → 200
+✔ POST /api/ai/analyze — có OPENAI_API_KEY (fake) → engine openai, không lộ key (86.435042ms)
+[api] POST /api/ai/analyze → 200
+✔ POST /api/ai/analyze — OpenAI 401 → rớt về rule-based, báo rõ lý do (65.709208ms)
+[api] GET /api/health → 200
+✔ GET /api/health → 200, storage type + counts (99.089292ms)
+[api] GET /api/dashboard/stats → 200
+[api] GET /api/assets → 200
+[api] GET /api/tickets → 200
+✔ GET /api/dashboard/stats → KPI khớp dữ liệu thực tế (15.740417ms)
+[api] GET /api/assets → 200
+✔ GET /api/assets → mảng tài sản mẫu (8.891167ms)
+[api] GET /api/assets?status=In%20Storage → 200
+[api] GET /api/assets?q=ThinkPad → 200
+[api] GET /api/assets?type=Printer → 200
+✔ GET /api/assets?q / ?status / ?type → filter server-side (15.74925ms)
+[api] POST /api/assets → 201
+[api] POST /api/assets → 409
+✔ POST /api/assets → 201, id tự sinh, status mặc định Active (56.159333ms)
+[api] POST /api/assets → 400
+[api] POST /api/assets → 422
+✔ POST /api/assets thiếu trường → 400; status sai → 422 (5.284625ms)
+[api] GET /api/assets/1 → 200
+[api] GET /api/assets/424242 → 404
+✔ GET /api/assets/:id → 200 / 404 (6.490084ms)
+[api] PATCH /api/assets/6 → 200
+[api] PATCH /api/assets/424242 → 404
+[api] PATCH /api/assets/6 → 409
+[api] PATCH /api/assets/6 → 422
+✔ PATCH /api/assets/:id → 200; 404; 409 trùng tag; 422 status sai (58.183083ms)
+[api] POST /api/assets → 201
+[assets] Xoá LP-QA-DEL (id 8)
+[api] DELETE /api/assets/8 → 200
+[api] DELETE /api/assets/8 → 404
+✔ DELETE /api/assets/:id → 200, xoá lại → 404 (181.530708ms)
+✔ request DTO: AssetInput/TicketInput/status/incident khai bao du field theo contract (0.682125ms)
+✔ response DTO: moi resource group co schema trong components (0.101958ms)
+✔ response DTO: monitoring status/history va audit co schema, khong phai response trong (0.1335ms)
+✔ UI extractor quét duoc moi wrapper va it nhat 15 endpoint (0.830333ms)
+✔ mọi endpoint UI goi deu ton tai trong backend (ke ca dynamic :id va subresource) (0.293625ms)
+✔ UI dynamic builder phai resolve dung item + status subresource (0.244666ms)
+✔ operationId convention: collection GET dung list*, item GET dung get* (0.2835ms)
+✔ REQUIRED RESPONSE WIRING: moi success operation bat buoc $ref DUNG STATUS CODE (0.104625ms)
+✔ REQUIRED RESPONSE WIRING: moi component bat buoc duoc it nhat mot operation tro toi (0.266916ms)
+✔ AssetInput phai mo ta duoc ca alias set va canonical set (0.730291ms)
+✔ AssetPatchInput phai document cac alias runtime chap nhan (0.104125ms)
+✔ status update: default Resolved phai hop len voi required cua schema (0.385708ms)
+✔ runtime asset: mixed alias, canonical status, vlan va unknown key khop schema that (446.672208ms)
+✔ runtime MiniERP incident bo qua unknown key nhu schema da chon (236.642791ms)
+✔ H-05: source registration khong co duplicate route signature (52.418125ms)
+✔ H-05: /api/tickets/export.csv va /api/tickets/:id la hai signature khac nhau (0.324958ms)
+✔ H-05: trailing slash duoc normalise de bat duplicate dang /x/ vs /x (1.374291ms)
+✔ contract: OpenAPI paths bang runtime/source route set (khong loai tru route nao) (0.564291ms)
+✔ contract: moi operationId unique va khong rong (0.372459ms)
+✔ contract: static UI endpoint literals deu thuoc backend set (0.400125ms)
+[api] GET /api/assets/export.csv → 200
+[api] GET /api/assets → 200
+✔ GET /api/assets/export.csv → 200 text/csv + BOM + đúng số dòng (156.540042ms)
+[api] GET /api/assets/export.csv?status=In%20Storage → 200
+✔ GET /api/assets/export.csv?status=In Storage → chỉ chứa dòng khớp filter (54.663458ms)
+[api] POST /api/assets → 201
+[api] GET /api/assets/export.csv?q=LP-QA-COMMA → 200
+✔ CSV escape trường chứa dấu phẩy / nháy kép (serial, model có dấu phẩy) (178.636584ms)
+[api] GET /api/tickets/export.csv → 200
+✔ GET /api/tickets/export.csv → báo cáo ticket đủ cột nghiệp vụ (4.256458ms)
+[api] GET /api/assets → 200
+[api] GET /api/assets/export.csv → 200
+[api] GET /api/assets → 200
+✔ CSV export không làm thay đổi dữ liệu (read-only) (54.081292ms)
+[api] POST /api/ai/log-analysis → 200
+✔ POST /api/ai/log-analysis — injection trong log không đổi severity/schema (212.118667ms)
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+✔ POST /api/ai/log-analysis — giới hạn 200 dòng + cắt dòng dài (232.246375ms)
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 200
+[api] GET /api/audit → 200
+✔ POST /api/ai/log-analysis — 10 concurrent requests đều 200 + audit đủ (728.261125ms)
+[api] POST /api/ai/log-analysis → 200
+[api] POST /api/ai/log-analysis → 400
+✔ POST /api/ai/log-analysis phân tích thật + mask PII + audit (344.485375ms)
+[api] GET /api/licenses → 200
+✔ GET /api/licenses → 200, available = total - assigned (173.385709ms)
+[api] GET /api/licenses/1 → 200
+[api] GET /api/licenses/999 → 404
+✔ GET /api/licenses/:id → 200 + utilizationPercent / 404 (25.182334ms)
+[api] DELETE /api/licenses/1 → 405
+[api] POST /api/assets/1 → 405
+✔ Method không hỗ trợ → 405 + Allow header (68.394375ms)
+[api] PUT /api/monitoring/checks → 405
+[api] GET /api/monitoring/checks/1/run → 405
+[api] POST /api/access-requests/1/handoff → 405
+[api] PUT /api/changes → 405
+✔ Factory routes trả 405 đúng Allow khi sai method (59.671375ms)
+[api] GET /api/does-not-exist → 404
+✔ Route lạ trong /api → 404 JSON kèm path (5.236916ms)
+[api] GET /api/health → 200
+✔ Body JSON hỏng → 400, server không crash (13.064166ms)
+✔ Static: GET / → HTML dashboard, GET /app.js → JS có nút export CSV (13.409875ms)
+✔ Runbook và scenario docs được serve read-only từ portal (8.181333ms)
+[api] GET /api/monitoring/ops-report → 200
+✔ GET /api/monitoring/ops-report trả JSON aggregate 200 (194.737125ms)
+[api] GET /api/monitoring/ops-report?windowHours=720 → 200
+✔ ops-report là aggregate-only: không lộ title/requester/description (13.252292ms)
+[api] GET /api/monitoring/ops-report?format=markdown → 200
+✔ ?format=markdown trả text/markdown có heading (6.213625ms)
+[api] GET /api/monitoring/ops-report?windowHours=0 → 200
+[api] GET /api/monitoring/ops-report?windowHours=9999 → 200
+✔ ?windowHours bị clamp về [1,168] (51.883ms)
+[api] POST /api/ai/log-analysis → 200
+[api] GET /api/monitoring/ops-report → 200
+✔ log-analysis chạy xong được đếm vào report (AI activity) (43.91125ms)
+[api] POST /api/assets → 201
+[api] POST /api/tickets → 201
+[api] GET /api/assets → 200
+[api] GET /api/tickets → 200
+[api] GET /api/dashboard/stats → 200
+✔ Restart server trên cùng dataDir → Assets & Tickets mới vẫn còn (322.131792ms)
+[api] GET /api/assets → 200
+[api] POST /api/assets → 201
+✔ id không bị cấp lại sau restart (đọc max id từ db.json) (60.363917ms)
+[api] PATCH /api/tickets/1006/status → 200
+[api] GET /api/tickets/1006 → 200
+✔ Trạng thái ticket đã đổi vẫn nguyên sau restart (64.072291ms)
+[api] POST /api/assets → 201
+✔ Ghi file là atomic: không còn file .tmp sót lại sau commit (49.829708ms)
+[api] GET /api/tickets → 200
+[api] GET /api/tickets?status=Open → 200
+[api] GET /api/tickets?priority=High → 200
+[api] GET /api/tickets?q=DNS → 200
+✔ GET /api/tickets + filter q / status / priority (142.225ms)
+[api] GET /api/tickets/1001 → 200
+[api] GET /api/tickets/999999 → 404
+✔ GET /api/tickets/:id → 200 / 404 (18.82675ms)
+[api] POST /api/tickets → 201
+✔ POST /api/tickets → 201, id >= 1001, status Open, createdAt "YYYY-MM-DD HH:mm" (109.644833ms)
+[api] POST /api/tickets → 201
+✔ POST /api/tickets mặc định priority=Medium, category=General khi thiếu (60.281667ms)
+[api] POST /api/tickets → 400
+[api] POST /api/tickets → 422
+✔ POST /api/tickets thiếu title/requester → 400; priority sai → 422 (6.584ms)
+[api] PATCH /api/tickets/1006/status → 200
+[api] PATCH /api/tickets/424242/status → 404
+[api] PATCH /api/tickets/1006/status → 422
+✔ PATCH /api/tickets/:id/status → 200 + resolvedAt; 404; 422 (60.529ms)
+[api] PATCH /api/tickets/1006/status → 200
+✔ PATCH /api/tickets/:id/status = In Progress → 200, xoá resolvedAt (54.226083ms)
+[api] GET /api/notifications → 200
+[notify:telegram] [ALERT][IT-HELPDESK] #1009 HIGH • Firewall treo - toàn công ty mất mạng • QA Bot (IT Support) • NETWORK • 2026-10-02 08:40:46
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1009 HIGH • Firewall treo - toàn công ty mất mạng ... to=it-team@bmc.local
+[api] POST /api/tickets → 201
+[api] GET /api/notifications → 200
+✔ POST /api/tickets mức High → phát sinh webhook alert (mock Telegram/Email) (142.640416ms)
+[api] POST /api/tickets → 201
+[api] GET /api/notifications → 200
+[notify:telegram] [ALERT][IT-HELPDESK] #1011 CRITICAL • Ransomware lây lan • QA (Security) • General • 2026-10-02 08:40:46
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1011 CRITICAL • Ransomware lây lan • QA (Security)... to=it-team@bmc.local
+[api] POST /api/tickets → 201
+[api] GET /api/notifications → 200
+✔ POST /api/tickets mức Critical → alert; mức Low → không alert (213.642666ms)
+[api] GET /api/notifications?limit=1 → 200
+✔ GET /api/notifications?limit=1 → tôn trọng limit, giữ tổng count (2.7445ms)
+✔ anonymous request toi protected GET tra 401 (khong handler nao chay truoc auth) (227.784291ms)
+✔ public probes: health 200, bad login 401, MiniERP incident thieu key 401 (92.705875ms)
+✔ VIEWER doc read endpoint duoc phep (200) nhung bi chan /api/audit (403) (280.67175ms)
+✔ VIEWER mutation bi 403; admin mutation khong con 401/403 (197.716292ms)
+▶ auth modes — fail-closed enterprise
+  ✔ enterprise mode without users throws at boot (no anonymous privileged path) (0.720291ms)
+  ✔ enterprise mode with users boots and reports its mode (0.12075ms)
+  ✔ unknown AUTH_MODE fails closed instead of falling back to open (0.101625ms)
+  ✔ legacy mode is refused in production (0.111042ms)
+  ✔ enterprise mode still issues and enforces session tokens per role (3.369416ms)
+✔ auth modes — fail-closed enterprise (5.153042ms)
+✔ csv: xuống dòng đúng chuẩn RFC-4180 (CRLF + BOM cho Excel UTF-8) (0.643917ms)
+✔ csv: escape dấu phẩy, nháy kép và xuống dòng trong ô (0.141542ms)
+✔ csv: giá trị null/undefined -> chuỗi rỗng, number/boolean thành text (0.797458ms)
+✔ csv: dataset rỗng vẫn trả header (file kiểm kê không bị trống hoàn toàn) (0.092875ms)
+✔ csv: cột là function -> suy ra giá trị (computed column) (0.111875ms)
+✔ csv: auditFilename định dạng IT-Asset-Audit_YYYYMMDD_HHmm.csv (1.40475ms)
+✔ notify: chỉ alert ticket High/Critical (3.557416ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #1006 HIGH • Printer on fire • A (Admin) • General • 2026-10-02 08:40:46
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1006 HIGH • Printer on fire • A (Admin) • General ... to=it-team@bmc.local
+✔ notify: alert ghi log file + history có payload mô phỏng Telegram/Email (24.031583ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #1 CRITICAL • x • Unknown (N/A) • General • 2026-10-02 08:40:46
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1 CRITICAL • x • Unknown (N/A) • General • 2026-10... to=it-team@bmc.local
+✔ notify: webhook URL lỗi không được làm sập request (deliver=false + lý do) (35.600458ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #11 HIGH • first • Unknown (N/A) • General • 2026-10-02 08:40:46
+[notify:email]    subject=[ALERT][IT-HELPDESK] #11 HIGH • first • Unknown (N/A) • General • 2026-1... to=it-team@bmc.local
+[notify:telegram] [ALERT][IT-HELPDESK] #22 CRITICAL • second • Unknown (N/A) • General • 2026-10-02 08:40:46
+[notify:email]    subject=[ALERT][IT-HELPDESK] #22 CRITICAL • second • Unknown (N/A) • General • 2... to=it-team@bmc.local
+[notify:telegram] [ALERT][IT-HELPDESK] #33 HIGH • third • Unknown (N/A) • General • 2026-10-02 08:40:46
+[notify:email]    subject=[ALERT][IT-HELPDESK] #33 HIGH • third • Unknown (N/A) • General • 2026-1... to=it-team@bmc.local
+✔ notify: history trả mới nhất trước và tôn trọng limit (66.145292ms)
+✔ restore rejects a backup whose content was modified after backup (93.964791ms)
+✔ restore of an unmodified backup reports integrity verified (37.870375ms)
+✔ restore still works when no sidecar exists, and says so (294.495834ms)
+✔ priority/SLA helpers and legacy migration are deterministic (81.603458ms)
+✔ backup validates and restores to a separate target (54.102084ms)
+✔ lab RBAC denies anonymous/L1 admin mutations and allows auditor reads (156.737916ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #1007 CRITICAL • ERP down • Line (General) • General • 2026-10-02 08:40:47
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1007 CRITICAL • ERP down • Line (General) • Genera... to=it-team@bmc.local
+[notify:telegram] [ALERT][IT-HELPDESK] #1009 CRITICAL • ERP failed • MiniERP (ERP Operations) • ERP • 2026-10-02 08:40:47
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1009 CRITICAL • ERP failed • MiniERP (ERP Operatio... to=it-team@bmc.local
+✔ ticket timeline/SLA, monitoring dedupe, and MiniERP idempotency work (707.547833ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #1007 CRITICAL • Long reference • MiniERP (ERP Operations) • ERP • 2026-10-02 08:40:47
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1007 CRITICAL • Long reference • MiniERP (ERP Oper... to=it-team@bmc.local
+✔ a long MiniERP external reference replays as one incident (accepted cap == stored cap) (188.611166ms)
+[api] POST /api/problems → 201
+[api] GET /api/dashboard/stats → 200
+[api] POST /api/tickets → 201
+[api] POST /api/tickets → 201
+[api] POST /api/problems/1/link-ticket → 200
+[api] POST /api/problems/1/link-ticket → 200
+[api] GET /api/problems/1 → 200
+[api] POST /api/changes → 422
+[api] POST /api/changes → 201
+[api] POST /api/access-requests → 201
+[api] POST /api/access-requests/1/approve → 200
+[api] GET /api/access-requests/1/handoff → 200
+[api] POST /api/access-requests → 201
+[api] POST /api/access-requests/2/offboard → 200
+[api] POST /api/access-requests/2/offboard → 200
+✔ problem/change and access handoff/offboarding workflows are idempotent (624.141542ms)
+✔ operations/runbooks tabs expose their DOM and client loaders (2.108625ms)
+✔ OpenAPI exposes authentication, ITSM, monitoring, MiniERP and audit contracts (0.304334ms)
+✔ factory delivery has the required runbooks and twelve reproducible scenarios (4.091083ms)
+✔ Docker image includes the factory runbooks and scenario documents (0.178584ms)
+✔ operations PowerShell scripts contain safety and evidence controls (1.378625ms)
+✔ live: app factory /api/health is ok (ephemeral port) (288.84475ms)
+SKIP closed-port-probe: http://127.0.0.1:1/nope unreachable (connect ECONNREFUSED 127.0.0.1:1)
+✔ live: probe of a closed port returns false and skips (no throw) (4.175417ms)
+✔ seeded ticket fixtures all have unique ids (0.322958ms)
+✔ GET /metrics → 200 text/plain, khong yeu cau auth (240.703167ms)
+✔ GET /metrics khong chua PII hay ticket bodies (12.386917ms)
+✔ GET /metrics dem request theo route×status (http_requests_total) (20.669458ms)
+✔ route la trong /api van 404 JSON (fail-closed giu nguyen) (19.000333ms)
+✔ notifier chi thay ticket da durable tren dia khi alert (ticket, monitoring, MiniERP) (336.112ms)
+✔ notifier treo: signal+deadline duoc cap, request bounded va alerted=false (194.030791ms)
+✔ notifier treo: monitoring va MiniERP van tra ket qua nhanh va durable (452.6ms)
+[error] Error: disk full (simulated)
+    at store.commit (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/notifier-ordering.test.js:173:38)
+    at save (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:96:28)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:101:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:176:19
+✔ commit that: notifier KHONG duoc goi (call count = 0) va client khong nhan success (74.5685ms)
+✔ safeNotify abort notifier chay refed handle va xoa handle khi timeout (255.595875ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #9001 HIGH • abort webhook • P (N/A) • General • 2026-10-02 08:40:48
+[notify:email]    subject=[ALERT][IT-HELPDESK] #9001 HIGH • abort webhook • P (N/A) • General • 20... to=it-team@bmc.local
+✔ notifier bo qua signal: response van alerted=false va khong kha dinh alert da gui (369.026334ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #9100 HIGH • abort during log io • P (N/A) • General • 2026-10-02 08:40:48
+[notify:email]    subject=[ALERT][IT-HELPDESK] #9100 HIGH • abort during log io • P (N/A) • Genera... to=it-team@bmc.local
+✔ default notifier truyền signal xuống fetch, abort socket và tra alerted=false (73.7465ms)
+✔ notifier bi abort trong luc ghi notifications.log: webhook khong duoc goi (23.041334ms)
+✔ POST /api/tickets van 201 va commit du khong notifier alert() throw synchronous (212.773709ms)
+✔ POST /api/tickets van 201 va commit du khong notifier alert() tra ve object dong bo (135.740458ms)
+✔ POST /api/tickets van 201 va commit du khong notifier alert() tra ve chuoi (khong phai Promise) (136.8525ms)
+✔ POST /api/tickets van 201 va commit du khong notifier alert() tra ve null (133.052667ms)
+✔ POST /api/tickets van 201 va commit du khong notifier alert() reject bat dong bo (104.936ms)
+✔ notifier that bai khong lam monitoring incident gay partial state (200.907542ms)
+✔ notifier that bai khong lam MiniERP intake partial state (210.014583ms)
+✔ SLA read khong 500 khi notifier alert throw dong bo (111.803666ms)
+✔ openapi.yaml parse duoc bang YAML that (khong syntax error) (56.182334ms)
+✔ openapi.yaml khong co duplicate mapping key (AuditEvent truoc day bi declare 2 lan) (32.684292ms)
+✔ moi component schema resolve duoc $ref va gia tri co kieu dung (60.519417ms)
+✔ AssetInput anyOf phai phu tat ca to hop alias doc lap doc, khong dung oneOf (31.311584ms)
+✔ Asset/AssetInput/AssetPatchInput status deu tro toi canonical lifecycle enum (26.614375ms)
+✔ response $ref doc lap theo TUNG status code (200/201 phai doc lap) (45.398459ms)
+✔ AssetPatchInput mo ta vlan, minProperties=1 va van cho phep unknown key ben canh field da biet (21.221125ms)
+✔ AssetPatchInput anyOf phai phu dung field runtime chap nhan, khong thua khong thieu (22.060125ms)
+✔ AssetPatchInput: unknown-only PATCH bi ca schema va runtime tu choi giong nhau (427.101875ms)
+[notify:telegram] [ALERT][IT-HELPDESK] #1007 HIGH • Matrix filter probe • Probe (General) • General • 2026-10-02 08:40:47
+[notify:email]    subject=[ALERT][IT-HELPDESK] #1007 HIGH • Matrix filter probe • Probe (General) ... to=it-team@bmc.local
+✔ GET /api/tickets giu legacy filter status/priority/q (195.427167ms)
+✔ POST /api/tickets giu validation 400/422 va default Medium/General (124.203833ms)
+✔ GET /api/tickets/:id tra 200 co ticket va 404 khi thieu (129.208083ms)
+✔ PATCH status: Open -> In Progress qua HTTP, state/status/resolvedAt coherent (171.950459ms)
+✔ PATCH status: Closed -> In Progress (Mo lai ticket Closed) qua HTTP (311.637ms)
+✔ PATCH status: Resolved -> In Progress giu timeline va audit coherent (227.702625ms)
+✔ PATCH status: 404 ticket thieu, 422 trang thai khong hop le (115.085ms)
+✔ GET /api/assets giu legacy filter va tra array (127.211291ms)
+✔ POST /api/assets giu 400 thieu truong va 409 trung tag/serial (138.47525ms)
+✔ PATCH /api/assets/:id giu 404, 409, 422 va 400 khi payload rong (228.508041ms)
+✔ PATCH /api/assets/:id payload rong tra 400, khong audit va khong mutate (113.590166ms)
+✔ PATCH status: Resolved -> Open xoa resolvedAt, giu state NEW/status Open (232.934167ms)
+✔ PATCH status: Closed -> Open xoa resolution + closedAt (192.274833ms)
+✔ PATCH status: reopen to Open ghi timeline from/to/note va audit actor (122.5185ms)
+✔ test-api.sh: MANAGEMENT phai lay tu env, khong hard-code (1.270334ms)
+✔ test-api.sh: chi duoc kill dung PID do chinh script tao (khong pkill theo ten) (0.369458ms)
+✔ test-api.sh: trap INT/TERM phai thoat de EXIT cleanup thuc su chay (0.363583ms)
+✔ test-api.sh: RUN_DIR tam nam ngoai repo va DATA_DIR la thu muc con cua no (0.206625ms)
+✔ test-api.sh: che do BASE_URL khong duoc mac dinh DATA_DIR ve data that cua repo (0.142291ms)
+✔ test-api.sh: port lay tu env hoac do OS cap, khong danh sach port du phong (tinh) (1.351625ms)
+✔ test-api.sh: pick_free_port() thuc su tra ve mot port trong (can bash) (113.505458ms)
+✔ test-api.sh: QA_LOG_DIR nhan log server + CSV + summary TRUOC khi xoa RUN_DIR (0.438375ms)
+✔ test-api.sh: van in bang PASS/FAIL + exit code chuan (tinh) (0.179292ms)
+✔ test-api.sh: bash -n parse duoc script (can bash) (9.993959ms)
+✔ test-api.sh: cleanup phai fail-safe — stop_server TRUOC, write_summary || true, xoa RUN_DIR sau cung (1.08375ms)
+✔ test-api.sh: failure path — server khong bao gio healthy thi khong con gi sot lai (11533.625875ms)
+✔ UI e2e: script + journey test ton tai trong repo (guard khi chay ngoai container) (0.85125ms)
+✔ UI e2e: journey Playwright chi chup screenshot trong QA_ROOT va chan network ngoai (0.914709ms)
+▶ PostgreSQL Store Adapter & Seam
+  ✔ createStore defaults to file persistence when DATABASE_URL is unset (0.532792ms)
+  ✔ createStore enables Postgres adapter when databaseUrl option is supplied (0.190667ms)
+  ✔ PostgresStoreAdapter properly builds schema SQL and executes in transaction (0.923ms)
+✔ PostgreSQL Store Adapter & Seam (2.234333ms)
+✔ các script PowerShell đều tồn tại (1.345625ms)
+✔ scripts/New-CompanyUser.ps1 — 0 lỗi cú pháp tĩnh (1.96075ms)
+✔ scripts/Export-ITAssetAudit.ps1 — 0 lỗi cú pháp tĩnh (1.185292ms)
+✔ scripts/Test-NetworkHealth.ps1 — 0 lỗi cú pháp tĩnh (0.875667ms)
+✔ scripts/Disable-CompanyUser.ps1 — 0 lỗi cú pháp tĩnh (1.185167ms)
+✔ scripts/Backup-HelpdeskData.ps1 — 0 lỗi cú pháp tĩnh (0.368708ms)
+✔ scripts/Restore-HelpdeskData.ps1 — 0 lỗi cú pháp tĩnh (0.563875ms)
+✔ scripts/Backup-ADConfiguration.ps1 — 0 lỗi cú pháp tĩnh (0.515333ms)
+✔ scripts/Test-PrintScanHealth.ps1 — 0 lỗi cú pháp tĩnh (0.686584ms)
+✔ New-CompanyUser.ps1 dùng ${username}: đúng chuẩn (regression lỗi từng có) (0.342625ms)
+✔ mutation: chuỗi kép chưa đóng → linter PHẢI báo lỗi (0.3225ms)
+✔ mutation: ngoặc nhọn lệch → linter PHẢI báo lỗi (0.402834ms)
+✔ mutation: $var: không bọc {} → linter PHẢI báo đúng rule var-colon (0.421041ms)
+✔ mutation: cmdlet gõ nhầm Get-CimInstanse → linter PHẢI gợi ý cmdlet đúng (1.328583ms)
+✔ mutation: smart quote trong code → linter PHẢI báo lỗi (0.795167ms)
+✔ đo lường độ chính xác: bản gốc SẠCH nhưng mỗi bản mutate đều có lỗi (2.245167ms)
+✔ danh sách route trích được từ src/app.js (không rỗng) (1.015209ms)
+✔ route inventory fail-closed: khong registration nao bi scanner bo qua (48.637292ms)
+✔ source registration khong dang ky trung route signature (raw, khong dedupe truoc) (57.569041ms)
+✔ route DELETE /api/assets/:id được kiểm trong test suite (4.082875ms)
+✔ route GET /api/access-requests được kiểm trong test suite (0.191458ms)
+✔ route GET /api/access-requests/:id được kiểm trong test suite (0.338208ms)
+✔ route GET /api/access-requests/:id/handoff được kiểm trong test suite (0.224959ms)
+✔ route GET /api/ai/agent/status được kiểm trong test suite (0.067666ms)
+✔ route GET /api/ai/status được kiểm trong test suite (0.092708ms)
+✔ route GET /api/assets được kiểm trong test suite (0.182417ms)
+✔ route GET /api/assets/:id được kiểm trong test suite (0.086834ms)
+✔ route GET /api/assets/export.csv được kiểm trong test suite (0.069417ms)
+✔ route GET /api/audit được kiểm trong test suite (0.08775ms)
+✔ route GET /api/auth/me được kiểm trong test suite (0.089458ms)
+✔ route GET /api/changes được kiểm trong test suite (0.089542ms)
+✔ route GET /api/changes/:id được kiểm trong test suite (0.372458ms)
+✔ route GET /api/dashboard/stats được kiểm trong test suite (0.049583ms)
+✔ route GET /api/health được kiểm trong test suite (0.055375ms)
+✔ route GET /api/licenses được kiểm trong test suite (0.073625ms)
+✔ route GET /api/licenses/:id được kiểm trong test suite (0.0625ms)
+✔ route GET /api/monitoring/checks được kiểm trong test suite (0.046917ms)
+✔ route GET /api/monitoring/checks/:id được kiểm trong test suite (1.265ms)
+✔ route GET /api/monitoring/history được kiểm trong test suite (0.084166ms)
+✔ route GET /api/monitoring/ops-report được kiểm trong test suite (0.073125ms)
+✔ route GET /api/monitoring/status được kiểm trong test suite (0.070792ms)
+✔ route GET /api/notifications được kiểm trong test suite (0.065083ms)
+✔ route GET /api/problems được kiểm trong test suite (0.0765ms)
+▶ route GET /api/problems/:id được kiểm trong test suite
+✔ scanner nhan dien duoc single, double va backtick path (7.02475ms)
+✔ scanner nhan dien router.get va app.route(...).get chain (2.33725ms)
+✔ scanner nhan dien array registration va tach thanh nhieu path (3.8ms)
+✔ FAIL-CLOSED: path trong bien hoac template dong -> unresolved, khong bo qua im lang (8.470459ms)
+✔ FAIL-CLOSED: chuoi trong comment va string khong duoc dem nhu route (15.9705ms)
+✔ duplicate qua nhieu style van bi bat (7.812209ms)
+✔ scanner giu file:line cho moi registration (7.19725ms)
+✔ source that giu nguyen inventory 55 route, khong unresolved (72.099167ms)
+✔ FAIL-CLOSED: computed member app['get'] duoc inventory hoac bao unresolved (7.437834ms)
+✔ FAIL-CLOSED: router['post'] duoc inventory hoac bao unresolved (0.582458ms)
+✔ FAIL-CLOSED: optional call app.get?.(...) duoc inventory hoac bao unresolved (1.7455ms)
+✔ FAIL-CLOSED: computed verb dong app[verb] khong duoc im lang bo qua (6.996875ms)
+✔ FAIL-CLOSED: optional computed app?.[verb] khong duoc im lang bo qua (15.979083ms)
+✔ FAIL-CLOSED: scanner khong bao gio tra inventory rong cho source co route (10.187542ms)
+✔ FAIL-CLOSED: comment gap giua method va ( duoc inventory hoac unresolved (0.5575ms)
+✔ FAIL-CLOSED: comment gap tren computed member cung khong duoc bo qua (0.296583ms)
+✔ FAIL-CLOSED: nhieu comment lien tie giua method va ( van duoc xu ly (0.257416ms)
+✔ FAIL-CLOSED: newline truoc ( cung khong duoc bo qua (0.233ms)
+▶ Service Bus worker with a governed lifecycle bridge
+  ✔ governed jobs execute through the lifecycle, never in the worker (9.109625ms)
+  ✔ non-governed jobs keep the exact legacy contract (0.115625ms)
+  ✔ jobs without an id are rejected, governed or not (0.30025ms)
+✔ Service Bus worker with a governed lifecycle bridge (10.160458ms)
+▶ Service Bus Automation Worker
+  ✔ processes valid automation job and marks complete (1.334542ms)
+  ✔ idempotently skips already processed job ID (deduplication) (0.111542ms)
+  ✔ rejects job without id (0.340125ms)
+✔ Service Bus Automation Worker (2.407458ms)
+✔ journal: kill-mid-write (journal + tmp dở) -> restart giữ state cũ, không corrupt (158.174ms)
+✔ journal: crash sau tmp fsync đầy đủ -> replay đúng dữ liệu đã commit (105.856167ms)
+✔ journal: replay idempotent — recover lần 2 không đổi gì (125.958958ms)
+✔ journal: normal write path cho kết quả byte-identical (trừ updatedAt) (218.385041ms)
+✔ store: seed khi data/db.json chưa tồn tại (73.704208ms)
+✔ store: dữ liệu sống sót qua restart (commit -> load lại) (100.957708ms)
+[store] db.json không hợp lệ (Expected property name or '}' in JSON at position 15 (line 1 column 16)) → đã backup db.json.corrupt-1790905248302-1ccfe0, khởi tạo lại từ dữ liệu mẫu.
+✔ store: db.json hỏng -> backup .corrupt-* rồi seed, không ném exception (72.154791ms)
+✔ store: nextId tăng dần theo collection, find trả bản ghi theo id số (62.6555ms)
+✔ store: commit ghi tuần tự, lần load sau thấy bản ghi cuối cùng (563.736833ms)
+✔ store: snapshot có version + updatedAt ISO (86.277375ms)
+✔ seed: cấu trúc dữ liệu mẫu hợp lệ (schema + ITIL realism) (0.281416ms)
+✔ POST /api/tickets alerted=false khi notifier cho nguong duoi (Low) (170.21975ms)
+✔ POST /api/tickets alerted=true khi notifier bao da gui (High) (140.746125ms)
+✔ POST /api/tickets khong duoc 500 khi notifier nem loi (van 201, alerted=false) (121.64875ms)
+[error] Error: disk full (simulated)
+    at store.commit (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:42:38)
+    at save (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:96:28)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:101:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:175
+✔ monitoring DOWN commit fail: check, incident, history va alert count ve nguyen state (212.585709ms)
+[error] Error: disk full (simulated)
+    at store.commit (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:42:38)
+    at save (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:96:28)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:101:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:175
+✔ monitoring UP commit fail: incident dang mo phai giu nguyen state va khong alert (146.394667ms)
+[error] Error: probe exploded before commit
+    at Object.runCheck (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:142:15)
+    at probe (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:324:104)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:323
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:100:28
+    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    at transact (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:97:47)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:181
+    at Layer.handle [as handle_request] (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/layer.js:95:5)
+    at next (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/route.js:149:13)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/auth.js:140:16
+✔ monitoring pre-commit exception: mutation truoc save cung phai rollback (87.127125ms)
+[error] Error: disk full (simulated)
+    at store.commit (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:42:38)
+    at save (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:96:28)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:101:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:175
+✔ rollback giu nguyen identity cua row dang ton tai (khong thay theo ca collection) (100.964041ms)
+[error] Error: disk full (simulated)
+    at c.context.store.commit (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:222:22)
+    at save (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:96:28)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:101:13
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:175
+✔ rollback khong xoa ticket da commit cua request chay song song (memory + db.json) (97.08775ms)
+[error] Error: probe exploded before commit
+    at Object.runCheck (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/test/transaction-rollback.test.js:276:15)
+    at probe (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:324:104)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:323
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:100:28
+    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:66:14)
+    at transact (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:97:47)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/enterprise-routes.js:330:181
+    at Layer.handle [as handle_request] (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/layer.js:95:5)
+    at next (/Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/node_modules/express/lib/router/route.js:149:13)
+    at /Users/mainguyenbinhtan/Downloads/Projects/Enterprise-IT-Helpdesk-Lab/internal-portal/src/auth.js:140:16
+✔ pre-commit exception rollback: chi field da ghi bi rewind, field khac giu nguyen (61.593333ms)
+✔ app.js chỉ tham chiếu id có thật trong index.html (1.102083ms)
+✔ index.html khai báo đủ phần tử then chốt của 4 phân hệ (0.089916ms)
+✔ các hàm gọi từ onclick trong app.js đều được định nghĩa (0.655625ms)
+✔ mọi lời gọi api/apiJson có body đều set Content-Type: application/json (0.832458ms)
+✔ CSS áp dụng thuộc tính hidden (không bị display:flex đè) (0.278084ms)
+✔ CSS chứa style cho các thành phần UI mới (0.166459ms)
+✔ CSS có responsive breakpoint + prefers-reduced-motion (0.133417ms)
+✔ app.js không còn fetch() thô ngoài tầng API (error handling tập trung) (0.22975ms)
+✔ mọi render ra HTML đều escapeHtml (chống XSS từ dữ liệu) (0.207875ms)
+✔ index.html cân bằng thẻ (không có thẻ mở chưa đóng) (0.58875ms)
+✔ index.html không có id trùng lặp (tránh DOM trả sai phần tử) (0.190042ms)
+✔ class JS thêm động vào DOM đều có định nghĩa trong CSS (0.613833ms)
+✔ mọi endpoint mà UI gọi đều tồn tại ở backend (42.670542ms)
+ℹ tests 348
+ℹ suites 11
+ℹ pass 347
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 13937.027959
