@@ -1,10 +1,10 @@
 {
   "registry": "ghcr.io",
   "repository": "ghcr.io/imtarget05/enterprise-it-helpdesk-lab-it-portal",
-  "tag": "ghcr.io/imtarget05/enterprise-it-helpdesk-lab-it-portal:c76c5c26ebf62e2eb0558f8488f1366719d4d2f0",
-  "digest": "sha256:8a09ccf179754fa027c0b4aaaff7753e912bb8f4dbab84eb146c43780f27f195",
-  "source_commit": "c76c5c26ebf62e2eb0558f8488f1366719d4d2f0",
+  "tag": "ghcr.io/imtarget05/enterprise-it-helpdesk-lab-it-portal:722cc1725885c2fb912cb85acf3b69acce28c168",
+  "digest": "sha256:9ee761eb2cfa6e861a98d77b16fafb9807f231b1f49a221597296eb8217dc6b9",
+  "source_commit": "722cc1725885c2fb912cb85acf3b69acce28c168",
   "build_location": "GitHub Actions",
   "mode": "production Node.js portal (Node 20-alpine)",
-  "workflow_run": "https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/runs/36957218161"
+  "workflow_run": "https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab/actions/runs/36959038492"
 }
