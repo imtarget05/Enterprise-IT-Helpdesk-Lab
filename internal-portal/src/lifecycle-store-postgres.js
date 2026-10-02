@@ -33,10 +33,57 @@ const { assertTransition, STATES } = require('./action-catalog');
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 const UNIQUE_VIOLATION = '23505';
 
+/**
+ * Decide TLS from an explicit, ranked configuration.
+ *
+ * Precedence: DATABASE_SSL env -> libpq `sslmode` in the connection string ->
+ * secure default (TLS on).
+ *
+ * The previous version hardcoded `ssl: {rejectUnauthorized: false}` and only
+ * honoured DATABASE_SSL === 'false'. That silently broke every local or CI
+ * PostgreSQL that does not have SSL compiled/enabled — the pool failed with
+ * "The server does not support SSL connections" instead of connecting. Encoding
+ * `sslmode` in the URL is the portable libpq convention, so a dev URL can say
+ * `?sslmode=disable` while an Azure URL keeps TLS on without any env var.
+ */
+function resolveSsl(connectionString, env = process.env) {
+  const override = env.DATABASE_SSL;
+  if (override === 'false') return false;
+  if (override === 'true' || override === 'require') return { rejectUnauthorized: false };
+  if (override === 'verify-full') return { rejectUnauthorized: true };
+
+  let sslmode = null;
+  try {
+    // Parse the query string only; a bare host:port string has no query.
+    const qIndex = connectionString ? connectionString.indexOf('?') : -1;
+    if (qIndex !== -1) {
+      sslmode = new URLSearchParams(connectionString.slice(qIndex + 1)).get('sslmode');
+    }
+  } catch {
+    // An unparseable URL is a connection error surfaced by `pg` itself, not by
+    // this resolver, so it must not throw here.
+    sslmode = null;
+  }
+
+  switch (sslmode) {
+    case 'disable':
+    case 'allow':
+      return false;
+    case 'verify-ca':
+    case 'verify-full':
+      return { rejectUnauthorized: true };
+    default:
+      // require / prefer / unspecified -> TLS, cert not verified against a CA
+      // because managed PostgreSQL presents a provider certificate.
+      return { rejectUnauthorized: false };
+  }
+}
+
 function createPostgresLifecycleStore(options = {}) {
+  const connectionString = options.connectionString || process.env.DATABASE_URL;
   const pool = options.pool || new Pool({
-    connectionString: options.connectionString || process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+    connectionString,
+    ssl: resolveSsl(connectionString),
     max: Number(process.env.PG_MAX_POOL || 10),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
@@ -326,4 +373,4 @@ function createPostgresLifecycleStore(options = {}) {
   };
 }
 
-module.exports = { createPostgresLifecycleStore, UNIQUE_VIOLATION };
+module.exports = { createPostgresLifecycleStore, resolveSsl, UNIQUE_VIOLATION };

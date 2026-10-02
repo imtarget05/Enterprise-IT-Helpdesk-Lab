@@ -43,10 +43,11 @@ Phase-1 commit `8838e03` was a duplicate of already-landed PR #3 and was
 
 | Suite | Command | Result |
 |---|---|---|
-| Node portal | `cd internal-portal && npm test` | **388 — 381 pass, 7 skipped, 0 fail** |
-| Node portal, with a real DB | `LIFECYCLE_PG_URL=… DATABASE_SSL=false npm test` | **388 — 387 pass, 1 skipped, 0 fail** |
+| Node portal | `cd internal-portal && npm test` | **397 — 390 pass, 7 skipped, 0 fail** |
+| Node portal, with a real DB | `LIFECYCLE_PG_URL='postgres://…@127.0.0.1:55432/postgres?sslmode=disable' npm test` | **397 — 396 pass, 1 skipped, 0 fail** |
 | Governed lifecycle (unit) | `node --test test/action-lifecycle.test.js` | **31/31** |
-| Governed lifecycle (REAL PostgreSQL 16) | `LIFECYCLE_PG_URL=… node --test test/action-lifecycle-postgres.test.js` | **6/6** |
+| Governed lifecycle (REAL PostgreSQL 16) | `LIFECYCLE_PG_URL=…?sslmode=disable node --test test/action-lifecycle-postgres.test.js` | **6/6** |
+| PostgreSQL TLS resolution + pool wiring | `node --test test/lifecycle-tls.test.js` | **8/8** (3 mutations caught, see below) |
 | Auth fail-closed | `node --test test/auth-failclosed.test.js` | **5/5** |
 | Service Bus bridge | `node --test test/servicebus-lifecycle-bridge.test.js` | **3/3** |
 | Python portal (Flask) | `DATA_FILE=$(mktemp -d)/db.json PORT=0 python3 -m unittest discover` | **90 OK** |
@@ -57,6 +58,23 @@ Phase-1 commit `8838e03` was a duplicate of already-landed PR #3 and was
 | CI @ `origin/main` | `gh run list` (PR #4 merge) | **CI ✓ · IaC Validate ✓ · Terraform Validate ✓** |
 
 Evidence: `docs/testing/evidence/2026-10-02-core-runtime-node-suite.log` (committed).
+
+### 4a. Defect found and closed on this pass — PostgreSQL TLS was hardcoded
+
+Re-running the durable suite against a real database (instead of trusting the
+committed "green" numbers) exposed a genuine defect:
+
+| | |
+|---|---|
+| **Symptom** | every `action-lifecycle-postgres` test failed with `The server does not support SSL connections` — **6 failures** that the no-DB run had hidden behind `skip` |
+| **Root cause** | `lifecycle-store-postgres.js` hardcoded `ssl: { rejectUnauthorized: false }` and only honoured `DATABASE_SSL === 'false'`. Any PostgreSQL without SSL (local docker, CI) could not connect at all |
+| **Fix** | `resolveSsl()` — ranked config: `DATABASE_SSL` env → libpq `?sslmode=` in the connection string → **secure default (TLS on)**. `?sslmode=disable` is now the portable dev opt-out; Azure URLs keep TLS with no env var |
+| **Security direction** | TLS-off requires an *explicit* opt-out. Removing `?sslmode=disable` restores encryption; there is no configuration in which TLS is dropped silently |
+| **Regression evidence** | the first version of the test only exercised `resolveSsl()` in isolation — and a mutation that restored the hardcoded `ssl` **survived it**. A pool-wiring assertion (`store.pool.options.ssl`) was added, and the mutation then failed as it must |
+| **Mutations caught** | M1 hardcoded `ssl` → 1 fail · M2 `sslmode=disable` branch removed → 2 fails · M3 secure default flipped to TLS-off → 3 fails |
+
+Measured after the fix: no-DB **397 / 390 pass / 7 skipped / 0 fail**;
+with real PostgreSQL 16 **397 / 396 pass / 1 skipped / 0 fail**.
 
 ## 4. Security invariants — status after Wave 2
 
@@ -83,6 +101,7 @@ Evidence: `docs/testing/evidence/2026-10-02-core-runtime-node-suite.log` (commit
 - **[helpdesk-capability-gaps]** — (1) no role-based access on portal routes, (2) no alert/ticket dedupe, (3) SLA is `slaPercent` only, no clock-based breach. *source: `docs/PORTFOLIO-COMPLETION-AUDIT-v2.md`*
 - **[helpdesk-azure-boundary]** — the live footprint is narrow: `authMode: "lab"`, mock webhook. Any "live RBAC / durable approval" claim must restate it. *source: `docs/PORTFOLIO-FLAGSHIP-MATRIX.md`*
 - **[wave2-boundaries]** — the durable store was exercised against **local PostgreSQL 16**, never Azure PostgreSQL; the governed pipeline is **not yet reachable over HTTP** (next Wave 2 step — not claimed here). *source: `docs/adr/0004-durable-action-lifecycle.md`*
+- **[wave2-pg-tls]** — database TLS is resolved from configuration, but **no certificate is verified against a CA** on the default path (`rejectUnauthorized: false`, required for managed-provider certs). Tightening this needs the Azure CA bundle and is a Wave 5 item, not claimed here.
 
 ## 7. NOT YET MEASURED (fail-closed)
 

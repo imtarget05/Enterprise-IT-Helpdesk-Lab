@@ -1,0 +1,20 @@
+# Evidence — lifecycle TLS resolution + pool wiring
+# date: 2026-10-02 (branch helpdesk/core-runtime)
+
+## CLEAN RUN (8/8)
+ℹ tests 8
+ℹ pass 8
+ℹ fail 0
+ℹ skipped 0
+
+## M1 MUTATION: hardcoded ssl restored in pool
+# expected: FAIL. observed: 1 fail (test "WIRING: the pool uses the resolved TLS")
+
+## M2 MUTATION: case 'disable' renamed -> sslmode=disable ignored
+# observed: 2 fails
+
+## M3 MUTATION: secure default flipped to TLS-off
+# observed: 3 fails
+
+## Real PostgreSQL 16 lifecycle suite (sslmode=disable)
+tests 6 / pass 6 / fail 0
