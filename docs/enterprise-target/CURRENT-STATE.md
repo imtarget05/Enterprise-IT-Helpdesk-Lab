@@ -56,6 +56,32 @@ Phase-1 commit `8838e03` was a duplicate of already-landed PR #3 and was
 | Terraform | `terraform validate` + `terraform test` | **valid / 13 passed, 0 failed** |
 | Terraform control bite tests | `python3 -m unittest discover -s infra/terraform/scripts/tests` | **18/18 OK** |
 | CI @ `origin/main` | `gh run list` (PR #4 merge) | **CI ✓ · IaC Validate ✓ · Terraform Validate ✓** |
+| CI on PR #5 head `7ab508b` | run `36955832608` | **12/12 jobs SUCCESS** (Portal tests Node 20 + 22, Python portal 3.11 + 3.12, PowerShell AST, OpenAPI, Docker Compose, gitleaks, npm audit, pip-audit, coverage audit, SonarCloud scan) |
+
+### 4d. The one red check, and why it was not a code regression
+
+`SonarCloud Code Analysis` reports **FAILURE** on the PR head. It is not a job
+in this repo's CI — it is the SonarCloud GitHub App, so it cannot be fixed or
+re-run from the repository. What was actually measured:
+
+| | |
+|---|---|
+| **Message** | "Quality Gate failed — Reliability Rating on New Code (required ≥ A), Security Rating on New Code (required ≥ A)" |
+| **Not caused by this branch** | on `main` and on every prior merge (`6678a01`, `3ad2449`) the same check reads **`cancelled`**, never `success`. It has never been green in this repo |
+| **Not readable** | the SonarCloud public API returns `total: 0` issues for the PR and for the branch, so the specific findings cannot be enumerated |
+| **Root configuration gap** | `sonar-project.properties` declares `sonar.projectKey=imtarget05_Enterprise-IT-Helpdesk-Lab`. The SonarCloud organization `imtarget05` has **33 projects and this key is not among them** (MAIA, Factory and the other portfolio repos are all present and analysed). Automatic Analysis is therefore running against a key that resolves to no project |
+
+Merged with the owner's explicit decision, recorded rather than hidden. **No
+check was disabled and nothing was force-pushed.** Two consequences stay open:
+
+- **[sonar-project-key-unverifiable]** — the real SonarCloud project key for
+  this repo is unknown and cannot be obtained from inside the repository, so no
+  Reliable/Security rating on new code can currently be *measured* here. If that
+  gate is meant to carry weight, someone with SonarCloud org access must supply
+  the key or create the project. *source: SonarCloud org listing, 2026-10-02*
+- **[sonar-new-code-rating-unknown]** — until that is fixed, "no reliability
+  bugs on new code" is **not a claim this repo can make**. The Node/Python suites
+  and the mutation evidence are the signals actually available.
 
 Evidence: `docs/testing/evidence/2026-10-02-core-runtime-node-suite.log` (committed).
 
