@@ -8,10 +8,22 @@
 #  the guards are `terraform validate`, the `terraform test` contract assertions
 #  and the plan-invariant checks.
 #
-#  State is NOT local durable truth: Phase 2 adds the Azure Storage remote
-#  backend + GitHub OIDC. Until then `backend "local"` is the default and is
-#  declared explicitly so a missing backend is a visible decision, never an
-#  accident.
+#  State is NOT local durable truth. Until Phase 2 this root had no backend
+#  block at all, which meant the first `terraform init` succeeded and state was
+#  written to a laptop `.tfstate` that no other operator could read — a silent
+#  failure that every static check stayed green through.
+#
+#  The backend is now a PARTIAL azurerm block; environments/<env>/backend.hcl
+#  supplies the values. Authentication is Entra ID only, and is per-environment:
+#
+#     local : `az login` (use_azuread_auth = true in backend.hcl)
+#     CI    : ARM_USE_OIDC=true ARM_USE_AZUREAD_AUTH=true + ARM_CLIENT_ID /
+#             ARM_TENANT_ID / ARM_SUBSCRIPTION_ID
+#
+#  `use_oidc` is deliberately NOT committed here or in any backend.hcl: a
+#  static value forces the GitHub Actions OIDC path, which reads
+#  ACTIONS_ID_TOKEN_REQUEST_TOKEN and therefore breaks a local `az login` init.
+#  tests/probe_backend_isolation.py fails the build if it is ever hardcoded back.
 # =============================================================================
 
 terraform {
@@ -23,6 +35,8 @@ terraform {
       version = "~> 4.0"
     }
   }
+
+  backend "azurerm" {}
 }
 
 provider "azurerm" {
