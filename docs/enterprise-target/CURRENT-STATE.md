@@ -13,10 +13,11 @@ rule        : no number appears below unless it was measured here, or is explici
 | Field | Value |
 |---|---|
 | remote | `https://github.com/imtarget05/Enterprise-IT-Helpdesk-Lab.git` |
-| **canonical ref (`origin/main`)** | `8401319b564e668db424a973c3f7fc72a9f823fd` |
-| local `HEAD` | `8401319b564e668db424a973c3f7fc72a9f823fd` (branch `main`) |
-| drift vs origin | **RECONCILED — HEAD == origin/main** |
-| worktree | **CLEAN before this pass; changes below are the Phase 0/1 deliverable** |
+| **canonical ref (`origin/main`)** | `a235165` (post-cleanup; the CD image-digest commit on top of the cleanup merge `f976d9b`) |
+| local `HEAD` | branch `main` — **2 behind / 1 ahead** of `origin/main` (local work is unpushed; `origin/main` is canonical) |
+| drift vs origin | `origin/main` is canonical; local `main` is stale and must not be quoted |
+| worktree | **CLEAN** |
+| Render purge | **DONE** — `internal-portal/render.yaml` + `.github/workflows/keepalive.yml` deleted in PR #1 (merge `f976d9b`); anti-Render gate `tests/test_hygiene_no_render.py` (5 tests) merged; `origin/main` tree has **zero** `render.yaml`/`keepalive*` artifacts |
 
 ## 2. Infrastructure as deployed today
 
