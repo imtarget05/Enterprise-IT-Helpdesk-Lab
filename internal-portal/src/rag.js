@@ -136,7 +136,15 @@ function loadChunks() {
     const dir = path.join(REPO_ROOT, sub);
     let files = [];
     try {
-      files = fs.readdirSync(dir).filter((f) => f.endsWith('.md')).sort();
+      // Only regular files at the top level. `readdirSync` with `dirent` skips
+      // subdirectories (docs/adr, docs/evidence, ...), so a directory is never
+      // fed to readFileSync — which would throw EISDIR on some platforms and be
+      // silently swallowed by the catch below, hiding a real corpus entry.
+      files = fs
+        .readdirSync(dir, { withFileTypes: true })
+        .filter((d) => d.isFile() && d.name.endsWith('.md'))
+        .map((d) => d.name)
+        .sort();
     } catch { /* thư mục thiếu → bỏ qua */ }
     for (const f of files) {
       try {

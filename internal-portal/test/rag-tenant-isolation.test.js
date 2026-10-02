@@ -21,6 +21,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 
 const {
   retrieve,
@@ -45,6 +46,35 @@ function corpus(entries) {
     version: CORPUS_VERSION,
   }));
   return { chunks, vecs: chunks.map(() => [1, 0, 0]) };
+}
+
+/**
+ * Read a corpus directory as a throwaway tree and index it.
+ *
+ * The isolation tests must NOT write into the repository's real `docs/`.
+ * `node --test` runs test FILES concurrently, so writing there races with any
+ * other suite reading the corpus — an untracked file appearing and disappearing
+ * mid-run makes another suite's result depend on scheduling. That failure mode
+ * is invisible locally (single file) and reproduces only under full-suite
+ * concurrency, which is exactly the case CI runs and the case a developer does
+ * not.
+ */
+function indexTempCorpus(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rag-tenant-'));
+  for (const [name, body] of Object.entries(files)) {
+    fs.writeFileSync(path.join(dir, name), body, 'utf8');
+  }
+  return { dir, chunks: chunkFilesIn(dir) };
+}
+
+/** Index one directory's top-level markdown files the way production does. */
+function chunkFilesIn(dir) {
+  const chunks = [];
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) {
+    const raw = fs.readFileSync(path.join(dir, f), 'utf8');
+    chunks.push(...chunkMarkdown(raw, `docs/${f}`, tenantOfFile(f, raw)));
+  }
+  return chunks;
 }
 
 describe('RAG corpus tenant classification', () => {
@@ -150,17 +180,17 @@ describe('RAG cross-tenant isolation against the real corpus', () => {
     }
   });
 
-  test('a tenant-private runbook on disk is unreachable from another tenant', () => {
-    // Writes a real private file, re-reads the corpus through the loader
-    // production uses, and asserts another tenant cannot see the marker.
-    const docsDir = path.resolve(__dirname, '..', '..', 'docs');
-    const file = path.join(docsDir, 'TENANT-contoso-confidential-runbook.md');
+  test('a tenant-private runbook is unreachable from another tenant', () => {
+    // Indexed through the same classify→chunk pipeline production uses, but in a
+    // temp directory so nothing here depends on (or disturbs) repository state.
     const marker = 'CONTOSO_CONFIDENTIAL_KEY_ROTATION';
-    fs.writeFileSync(file, `---\ntenant: contoso\n---\n\n# Confidential\n\n## Rotation\n\n${marker}\n`, 'utf8');
+    const { dir, chunks } = indexTempCorpus({
+      'shared-runbook.md': '# Shared\n\n## Triage\n\nshared reset procedure',
+      'TENANT-contoso-confidential.md': `---\ntenant: contoso\n---\n\n# Confidential\n\n## Rotation\n\n${marker}\n`,
+    });
     try {
-      const chunks = loadChunks();
       const secret = chunks.filter((c) => c.text.includes(marker));
-      assert.equal(secret.length, 1, 'fixture file was not indexed');
+      assert.equal(secret.length, 1, 'the private fixture was not indexed');
       assert.equal(secret[0].tenantId, 'contoso');
 
       assert.equal(chunkVisibleTo(secret[0], 'acme'), false);
@@ -177,7 +207,7 @@ describe('RAG cross-tenant isolation against the real corpus', () => {
       const owner = memorySearch(chunks, all, [1, 0, 0], chunks.length, 'contoso');
       assert.equal(owner.some((h) => h.text.includes(marker)), true, 'the owning tenant lost its own document');
     } finally {
-      fs.unlinkSync(file);
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });
