@@ -353,3 +353,57 @@ describe('cross-tenant isolation — problems and changes (ITSM)', () => {
     assert.ok(!problem.data.linkedTicketIds.includes(ticketA.id));
   });
 });
+
+/**
+ * `/api/ai/analyze` is an AI read path that also looks a ticket up by id.
+ *
+ * It was the last route still using `store.find` directly, so it resolved any
+ * ticket id in the store regardless of tenant — the response carries the ticket
+ * title, description, requester and department back to the caller, and the
+ * analysis quotes them into an LLM prompt. HTTP tenant checks upstream do not
+ * help when the handler itself skips them.
+ *
+ * The negative control is the whole point: restoring the bypass must fail here.
+ */
+describe('AI analysis does not bypass tenant scope', () => {
+  test('analysing another tenant\'s ticket by id is refused', async () => {
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const b = await tokenAs('b.admin', 'pw-b-admin');
+    const ticketA = await createTicket(a, 'tenant A confidential payroll incident');
+
+    const attack = await client.json('POST', '/api/ai/analyze', { ticketId: ticketA.id }, b);
+    assert.equal(attack.status, 404, `tenant B analysed tenant A's ticket (status ${attack.status})`);
+
+    // The refusal must not echo the content back in any form.
+    const body = JSON.stringify(attack.data || {});
+    assert.equal(body.includes('confidential payroll'), false, 'the refused analysis leaked ticket content');
+  });
+
+  test('analysing your own tenant\'s ticket still works', async () => {
+    // The negative control only means something if the positive path is intact.
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const ticketA = await createTicket(a, 'tenant A own ticket to analyse');
+    const own = await client.json('POST', '/api/ai/analyze', { ticketId: ticketA.id }, a);
+    assert.equal(own.status, 200, `own-tenant analysis was refused: ${JSON.stringify(own.data).slice(0, 200)}`);
+    assert.equal(own.data.ticketId, ticketA.id);
+  });
+
+  test('a body-supplied tenant does not override the session tenant', async () => {
+    // The handler must derive scope from the authenticated user. If a body field
+    // could widen or narrow scope, tenant would be caller-controlled again.
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const b = await tokenAs('b.admin', 'pw-b-admin');
+    const ticketA = await createTicket(a, 'tenant A ticket for tenant spoofing attempt');
+
+    const attack = await client.json(
+      'POST', '/api/ai/analyze', { ticketId: ticketA.id, tenant: 'tenant-alpha' }, b,
+    );
+    assert.equal(attack.status, 404, 'a body tenant field overrode the session tenant');
+  });
+
+  test('an unknown ticket id is refused rather than analysed as free text', async () => {
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const missing = await client.json('POST', '/api/ai/analyze', { ticketId: 999999999 }, a);
+    assert.equal(missing.status, 404);
+  });
+});
