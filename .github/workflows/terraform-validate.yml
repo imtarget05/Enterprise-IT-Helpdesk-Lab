@@ -102,9 +102,22 @@ jobs:
       - name: Control bite tests (std lib unittest, froze/parity/plan)
         run: python3 -m unittest discover -s scripts/tests -v
 
+      # WHY working-directory "." HERE AND NOT THE JOB DEFAULT. The job default is
+      # `infra/terraform`, but this script's `--root` and `--lock` DEFAULTS are
+      # relative to the REPOSITORY ROOT (`infra`, `infra/FROZEN.lock.json`), and
+      # running it from `infra/terraform` silently compares the wrong tree —
+      # it reported every Bicep file as "ADDED, not part of the frozen set".
+      #
+      # It also takes `--root`/`--lock`, NOT `--repo-root`: passing `--repo-root`
+      # made argparse exit 2 with "unrecognized arguments", so this step had
+      # never run successfully in CI. A control that has only ever failed is not
+      # a control, and the 10/10 it reports locally was never actually observed
+      # by the pipeline.
       - name: Bicep freeze control
-        run: python3 scripts/check_bicep_frozen.py --repo-root ../..
+        working-directory: .
+        run: python3 infra/terraform/scripts/check_bicep_frozen.py
 
+      # check_parity.py DOES take --repo-root, so it keeps the job default.
       - name: Bicep↔Terraform parity control
         run: python3 scripts/check_parity.py --repo-root ../..
 
