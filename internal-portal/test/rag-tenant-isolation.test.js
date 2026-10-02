@@ -231,40 +231,6 @@ describe('RAG citations and untrusted-input framing', () => {
 
   test('rendered context cites source, section, chunk id and version', () => {
     const ctx = formatContext([hit]);
-describe('RAG tenant filter on the external vector store path', () => {
-  /** A fetch stand-in that serves Qdrant-shaped hits and rejects Ollama. */
-  function fakeVectorStore(hits) {
-    return async (url, opts = {}) => {
-      const body = opts.body ? JSON.parse(opts.body) : {};
-      if (String(url).includes('/api/embeddings')) throw new Error('no ollama');
-      if (String(url).includes('/points/search')) {
-        return { ok: true, json: async () => ({ result: hits.map((h) => ({ score: 0.9, payload: h })) }) };
-      }
-      return { ok: true, json: async () => ({}) };
-    };
-  }
-
-  test('Qdrant hits owned by another tenant are dropped', async () => {
-    // The memory path is covered elsewhere; this pins the EXTERNAL store, which
-    // is the path that runs in production. An external vector store is not an
-    // authority on who may read what, so its hits get the same filter.
-    const fetchImpl = fakeVectorStore([
-      { text: 'CONTOSO INTERNAL payroll export', source: 'docs/x.md', section: 's', tenantId: 'contoso', chunkId: 'q1', version: 1 },
-      { text: 'shared reset procedure', source: 'docs/y.md', section: 's', tenantId: SHARED_TENANT, chunkId: 'q2', version: 1 },
-    ]);
-    const hits = await retrieve('reset', 5, { fetchImpl, tenantId: 'acme' });
-    assert.equal(hits.some((h) => h.text.includes('CONTOSO INTERNAL')), false, 'a foreign tenant chunk came back from Qdrant');
-    assert.equal(hits.every((h) => chunkVisibleTo(h, 'acme')), true);
-  });
-
-  test('a Qdrant hit set that is entirely foreign yields nothing', async () => {
-    const fetchImpl = fakeVectorStore([
-      { text: 'CONTOSO INTERNAL only', source: 'docs/x.md', section: 's', tenantId: 'contoso', chunkId: 'q1', version: 1 },
-    ]);
-    const hits = await retrieve('anything', 5, { fetchImpl, tenantId: 'acme' });
-    assert.equal(hits.some((h) => h.tenantId === 'contoso'), false);
-  });
-});
     assert.ok(ctx.includes('docs/runbook.md'));
     assert.ok(ctx.includes('Procedure'));
     assert.ok(ctx.includes(hit.chunkId));
@@ -299,6 +265,87 @@ describe('RAG tenant filter on the external vector store path', () => {
   test('empty hits render nothing rather than an empty labelled region', () => {
     assert.equal(formatContext([]), '');
     assert.equal(formatContext(null), '');
+  });
+});
+
+describe('RAG tenant filter on the external vector store path', () => {
+  /** A fetch stand-in that serves Qdrant-shaped hits and rejects Ollama. */
+  function fakeVectorStore(hits) {
+    return async (url, opts = {}) => {
+      if (String(url).includes('/api/embeddings')) throw new Error('no ollama');
+      if (String(url).includes('/points/search')) {
+        return { ok: true, json: async () => ({ result: hits.map((h) => ({ score: 0.9, payload: h })) }) };
+      }
+      return { ok: true, json: async () => ({}) };
+    };
+  }
+
+  test('Qdrant hits owned by another tenant are dropped', async () => {
+    // The memory path is covered elsewhere; this pins the EXTERNAL store, which
+    // is the path that runs in production. An external vector store is not an
+    // authority on who may read what, so its hits get the same filter.
+    const fetchImpl = fakeVectorStore([
+      { text: 'CONTOSO INTERNAL payroll export', source: 'docs/x.md', section: 's', tenantId: 'contoso', chunkId: 'q1', version: 1 },
+      { text: 'shared reset procedure', source: 'docs/y.md', section: 's', tenantId: SHARED_TENANT, chunkId: 'q2', version: 1 },
+    ]);
+    const hits = await retrieve('reset', 5, { fetchImpl, tenantId: 'acme' });
+    assert.equal(hits.some((h) => h.text.includes('CONTOSO INTERNAL')), false, 'a foreign tenant chunk came back from Qdrant');
+    assert.equal(hits.every((h) => chunkVisibleTo(h, 'acme')), true);
+  });
+
+  test('a Qdrant hit set that is entirely foreign yields nothing', async () => {
+    const fetchImpl = fakeVectorStore([
+      { text: 'CONTOSO INTERNAL only', source: 'docs/x.md', section: 's', tenantId: 'contoso', chunkId: 'q1', version: 1 },
+    ]);
+    const hits = await retrieve('anything', 5, { fetchImpl, tenantId: 'acme' });
+    assert.equal(hits.some((h) => h.tenantId === 'contoso'), false);
+  });
+});
+
+describe('test-file structure', () => {
+  /**
+   * A `describe` nested inside a `test` body is syntactically valid and executes
+   * ZERO of its own tests - the declarations are hoisted into a callback that
+   * only runs if the enclosing test happens to call it. The enclosing test still
+   * passes, so a whole block of tests can vanish while the suite stays green.
+   *
+   * That failure mode cost this file two CI rounds. `node --test` reports the
+   * nesting itself as a failure, but only because it happens to inspect block
+   * structure; a local single-file run reports the enclosing test as passing and
+   * the inner ones as never-registered, which reads as "24 passed".
+   *
+   * So check it directly: every `describe` in a test file must sit at column 0,
+   * and every `test` must be indented inside one. A violation here means some
+   * test in this file is not running.
+   */
+  test('no describe is declared inside a test body', () => {
+    const lines = fs.readFileSync(__filename, 'utf8').split('\n');
+    const offenders = lines
+      .map((line, i) => ({ line, n: i + 1 }))
+      .filter(({ line }) => /^(\s+)describe\(/.test(line) && !/^\s*$/.test(line));
+    assert.deepEqual(
+      offenders.map((o) => `line ${o.n}: ${o.line.trim()}`),
+      [],
+      'an indented describe() is nested inside a test and its tests never run',
+    );
+  });
+
+  test('every test name is unique within the file', () => {
+    // Duplicates are the other half of the same mistake: a block copied during
+    // an edit can leave two identically named tests, and the suite count stays
+    // plausible while coverage silently shrinks.
+    const names = [...fs.readFileSync(__filename, 'utf8').matchAll(/^\s*test\('([^']+)'/gm)].map((m) => m[1]);
+    const seen = new Set();
+    const dupes = names.filter((n) => (seen.has(n) ? true : (seen.add(n), false)));
+    assert.deepEqual(dupes, [], `duplicate test names: ${dupes.join(', ')}`);
+  });
+
+  test('this file registers the tests it appears to declare', () => {
+    const src = fs.readFileSync(__filename, 'utf8');
+    const declared = (src.match(/^\s*test\(/gm) || []).length;
+    // 27 as of this commit (24 behavioural + 3 structural guards). A drop means
+    // a declaration stopped being reached.
+    assert.equal(declared, 27, `expected 27 test() declarations, found ${declared}`);
   });
 });
 
