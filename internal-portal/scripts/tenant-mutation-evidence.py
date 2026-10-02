@@ -23,6 +23,8 @@ SUITES = [
     PORTAL / "test" / "agent-runtime.test.js",
     PORTAL / "test" / "lifecycle-toctou.test.js",
     PORTAL / "test" / "action-lifecycle.test.js",
+    PORTAL / "test" / "automation-queue-worker.test.js",
+    PORTAL / "test" / "automation-http.test.js",
 ]
 
 MUTATIONS = [
@@ -102,6 +104,34 @@ MUTATIONS = [
         "src/action-lifecycle.js",
         "    if (!catalog.isKnownAction(proposal.action)) {\n      await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'action is not in the catalog' } });\n      return { ok: false, status: 'POISON', executed: false, code: 'UNKNOWN_ACTION' };\n    }",
         "",
+    ),
+    (
+        "M-L8",
+        "post-check ignored again (an unverified post-check reports SUCCEEDED)",
+        "src/action-lifecycle.js",
+        "    const postCheckOk = isPostCheckVerified(outcome);",
+        "    const postCheckOk = true;",
+    ),
+    (
+        "M-L9",
+        "the retry budget is off by one in BOTH queue implementations",
+        "src/automation-queue.js",
+        "      const attempt = Number(message.attempt || 1);\n\n      if (attempt < maxAttempts && isTransient(error)) {\n        pending[idx] = { ...message, attempt: attempt + 1 };",
+        "      const attempt = Number(message.attempt || 1) + 1;\n\n      if (attempt < maxAttempts && isTransient(error)) {\n        pending[idx] = { ...message, attempt };",
+    ),
+    (
+        "M-L10",
+        "the tenant agreement gate removed (an envelope may name another tenant)",
+        "src/action-lifecycle.js",
+        "    if (message.tenantId && String(message.tenantId) !== String(proposal.tenantId)) {\n      await audit({\n        ...base, event: 'DENIED', actor: workerId,\n        detail: { stage: 'worker', reason: 'envelope tenant does not match the proposal tenant' },\n      });\n      return { ok: false, status: 'POISON', executed: false, code: 'TENANT_MISMATCH' };\n    }",
+        "",
+    ),
+    (
+        "M-L11",
+        "the worker trusts any tenant-bearing envelope (missing-tenant check removed)",
+        "src/automation-worker.js",
+        "    if (!message.tenantId) {",
+        "    if (false) {",
     ),
 ]
 

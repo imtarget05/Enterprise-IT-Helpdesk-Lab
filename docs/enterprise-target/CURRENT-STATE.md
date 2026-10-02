@@ -43,12 +43,13 @@ Phase-1 commit `8838e03` was a duplicate of already-landed PR #3 and was
 
 | Suite | Command | Result |
 |---|---|---|
-| Node portal | `cd internal-portal && npm test` | **439 — 432 pass, 7 skipped, 0 fail** |
-| Node portal, with a real DB | `LIFECYCLE_PG_URL='postgres://…@127.0.0.1:55432/postgres?sslmode=disable' npm test` | **439 — 438 pass, 1 skipped, 0 fail** |
+| Node portal | `cd internal-portal && npm test` | **457 — 450 pass, 7 skipped, 0 fail** |
+| Node portal, with a real DB | `LIFECYCLE_PG_URL='postgres://…@127.0.0.1:55432/postgres?sslmode=disable' npm test` | **457 — 456 pass, 1 skipped, 0 fail** |
 | Governed lifecycle (unit) | `node --test test/action-lifecycle.test.js` | **31/31** |
 | Governed lifecycle (REAL PostgreSQL 16) | `LIFECYCLE_PG_URL=…?sslmode=disable node --test test/action-lifecycle-postgres.test.js` | **6/6** |
 | TOCTOU binding | `node --test test/lifecycle-toctou.test.js` | **15/15** |
 | Governed lifecycle over HTTP (E2E) | `node --test test/automation-http.test.js` | **15/15** (CASE 1–10) |
+| Queue + worker + retry/DLQ | `node --test test/automation-queue-worker.test.js` | **18/18** |
 | PostgreSQL TLS resolution + pool wiring | `node --test test/lifecycle-tls.test.js` | **8/8** (3 mutations caught, see below) |
 | Auth fail-closed | `node --test test/auth-failclosed.test.js` | **5/5** |
 | Service Bus bridge | `node --test test/servicebus-lifecycle-bridge.test.js` | **3/3** |
@@ -132,9 +133,53 @@ fail). Two initially SURVIVED, and both failures were the same mistake on my par
 | M-L4 | `enqueue`'s TOCTOU gate removed | **SURVIVED** | the test asserted `code ∈ [PAYLOAD_MODIFIED, APPROVAL_PAYLOAD_MISMATCH]` — the second check was still firing, so the test passed with the first deleted | assert the **exact** code, and add a separate test where the tamperer repairs the self-consistency so only the approval hash can catch it |
 | M-L7 | worker stops checking the catalog | **SURVIVED** | no test could produce a row with an out-of-catalog action, because `propose()` refuses to create one | plant the row directly, as a compromised queue/DB writer would |
 
-Both were cases of a test passing for the *wrong reason*. The lesson generalises:
-asserting a union of acceptable outcomes is how a control quietly stops being
-tested.
+### 4g. Phase 2 — durable queue and the deterministic worker
+
+The pipeline previously dead-ended at the boundary: an approval moved the
+proposal to `APPROVED` and, with no queue configured, nothing further happened.
+"Approval does not execute" was true, but so was "approval does not lead
+anywhere". There is now a real durable queue and a real worker.
+
+| | |
+|---|---|
+| **Queue** | `automation-queue.js`. File-backed by default (`<dataDir>/automation-queue`), atomic tmp+rename writes, serialised through a promise chain. De-duplicates by `jobId`. The in-memory variant declares `durable: false` in its own shape so a test cannot quietly claim durability it does not have. |
+| **Envelope** | versioned (`schemaVersion`), carries `jobId`, `proposalId`, `tenantId`, `correlationId`, `risk`, `payloadHash`, `idempotencyKey`, `attempt` — **no parameters, no command**. Parameters are re-read from the store. |
+| **Worker** | `automation-worker.js`. The queue is treated as untrusted: preflight plus `execute()`'s own gates re-check catalog, approval, payload hash, idempotency and now tenant agreement. |
+| **Retry / DLQ** | TRANSIENT earns a bounded retry; PERMANENT and policy refusals go straight to the DLQ with a reason. Replay is explicit and idempotent. |
+
+### 4h. Three more defects, all found by tests rather than by reading
+
+**1. A cross-tenant envelope confusion.** `execute()` re-read the tenant from the
+store — correctly — but never checked that the **envelope's** tenant agreed with
+it. A message claiming `tenant-b` while pointing at a `tenant-a` proposal
+executed successfully under tenant-a's authority while the transport recorded
+tenant-b. The job would be audited, metered and DLQ-triaged against the wrong
+tenant. Now a mismatch is refused (`TENANT_MISMATCH`).
+
+**2. The retry budget was off by one, in both queues.** `attempt` was computed as
+`message.attempt + 1` and then compared with `< maxAttempts`, so a
+`maxAttempts: 3` budget allowed only two retries. A retryable job was
+dead-lettered one delivery early.
+
+**3. A reclaim did not advance the attempt counter.** After
+`reclaimExecution()` the lifecycle kept using the pre-reclaim `attempt`, so the
+"exhausted" check compared a stale value.
+
+### 4i. A third hollow test, in the same family
+
+M-L9 survived its first attempt. The mutation was applied to the **durable**
+queue, but the only retry test used the **in-memory** one — so the mutation
+changed nothing the tests exercised. Two identical copies of the same arithmetic
+existed with only one under test.
+
+Fixed by asserting the bound on both implementations. The generalisable lesson is
+now three instances of one mistake: **assert what the branch actually does, and
+test every copy of duplicated logic.** A union of acceptable codes (M-L4), a
+test that could not produce its input (M-L7), and logic duplicated in two
+implementations with one untested (M-L9).
+
+Mutation evidence now covers 15 mutations across 6 suites (baseline 145 pass /
+0 fail); all 15 are caught.
 
 Evidence: `docs/testing/evidence/2026-10-02-core-runtime-node-suite.log` (committed).
 
@@ -244,7 +289,7 @@ assertions would have passed vacuously — which is why the test now asserts the
 - **[helpdesk-capability-gaps]** — (1) no role-based access on portal routes, (2) no alert/ticket dedupe, (3) SLA is `slaPercent` only, no clock-based breach. *source: `docs/PORTFOLIO-COMPLETION-AUDIT-v2.md`*
 - **[helpdesk-azure-boundary]** — the live footprint is narrow: `authMode: "lab"`, mock webhook. Any "live RBAC / durable approval" claim must restate it. *source: `docs/PORTFOLIO-FLAGSHIP-MATRIX.md`*
 - **[wave2-boundaries]** — the durable store was exercised against **local PostgreSQL 16**, never Azure PostgreSQL. *source: `docs/adr/0004-durable-action-lifecycle.md`*
-- **[wave2-http-queue]** — the HTTP approval path calls `lifecycle.enqueue()` and then `queue.publish()` **when a queue is injected**. With no queue configured the proposal is left in `APPROVED` and the response carries `queued: false`. **Service Bus publishing is not verified live**; only the repository abstraction is exercised. *source: `internal-portal/src/automation-routes.js`*
+- **[wave2-http-queue]** — RESOLVED in phase 2. The durable queue is wired by default, so an approval now enqueues for real. **Service Bus itself is still not connected** — the file-backed queue is the transport; the same contract (`publish`/`receive`/`complete`/`fail`/`replay`) is what an Azure Service Bus adapter would implement. *source: `internal-portal/src/automation-queue.js`*
 - **[wave2-executor-simulated]** — the default executor is a **simulation** that returns `simulated: true` and touches nothing. A real executor must be injected explicitly; no privileged system has been acted on. *source: `internal-portal/src/automation-runtime.js`*
 - **[wave2-scope]** — only `tickets` and `assets` are tenant-scoped. **`problems` and `changes` are NOT**, and are deliberately not exposed to agent tools rather than exposed unscoped. *source: `internal-portal/src/tenant-scope.js`*
 - **[wave2-pg-tls]** — database TLS is resolved from configuration, but **no certificate is verified against a CA** on the default path (`rejectUnauthorized: false`, required for managed-provider certs). Tightening this needs the Azure CA bundle and is a Wave 5 item, not claimed here.
