@@ -43,8 +43,9 @@ Phase-1 commit `8838e03` was a duplicate of already-landed PR #3 and was
 
 | Suite | Command | Result |
 |---|---|---|
-| Node portal | `cd internal-portal && npm test` | **457 — 450 pass, 7 skipped, 0 fail** |
-| Node portal, with a real DB | `LIFECYCLE_PG_URL='postgres://…@127.0.0.1:55432/postgres?sslmode=disable' npm test` | **457 — 456 pass, 1 skipped, 0 fail** |
+| Node portal | `cd internal-portal && npm test` | **462 — 455 pass, 7 skipped, 0 fail** |
+| Node portal, with a real DB | `LIFECYCLE_PG_URL='postgres://…@127.0.0.1:55432/postgres?sslmode=disable' npm test` | **462 — 461 pass, 1 skipped, 0 fail** |
+| Tenant isolation (HTTP + agent + ITSM) | `node --test test/tenant-isolation.test.js` | **16/16** |
 | Governed lifecycle (unit) | `node --test test/action-lifecycle.test.js` | **31/31** |
 | Governed lifecycle (REAL PostgreSQL 16) | `LIFECYCLE_PG_URL=…?sslmode=disable node --test test/action-lifecycle-postgres.test.js` | **6/6** |
 | TOCTOU binding | `node --test test/lifecycle-toctou.test.js` | **15/15** |
@@ -178,8 +179,31 @@ test every copy of duplicated logic.** A union of acceptable codes (M-L4), a
 test that could not produce its input (M-L7), and logic duplicated in two
 implementations with one untested (M-L9).
 
-Mutation evidence now covers 15 mutations across 6 suites (baseline 145 pass /
-0 fail); all 15 are caught.
+### 4j. Phase 4 — the last unscoped collections were a real cross-tenant leak
+
+The ledger had carried `[wave2-scope]` — "only `tickets` and `assets` are
+tenant-scoped, `problems` and `changes` are NOT" — as a known limitation. Reading
+the code showed it was worse than an unstated gap:
+
+- `GET /api/problems` returned `store.data.problems` **unfiltered**;
+- `GET /api/changes` returned `store.data.changes` **unfiltered**;
+- every single-row read and every write went through the unscoped `find()`.
+
+So any authenticated tenant saw every other tenant's **root causes, workarounds,
+rollback plans and maintenance windows** for ITSM changes. This was not a
+hypothetical risk; it was a served endpoint.
+
+Both collections now follow the same three rules as tickets and assets — filtered
+lists, 404 on a foreign single row, stamped on create — and `POST /api/changes/
+:id/approve` is a scoped write, since approving another tenant's change is a
+cross-tenant mutation. Five adversarial cases cover it, including that a
+cross-tenant ticket cannot be linked into another tenant's problem, and three
+mutations (M-L12/M-L13/M-L14) reintroduce each leak and are caught.
+
+This closes the last known tenant gap. The honest scope statement is now: every
+tenant-owned business collection in this portal is tenant-scoped.
+
+Mutation evidence: 18 mutations across 6 suites, all caught.
 
 Evidence: `docs/testing/evidence/2026-10-02-core-runtime-node-suite.log` (committed).
 
@@ -291,7 +315,12 @@ assertions would have passed vacuously — which is why the test now asserts the
 - **[wave2-boundaries]** — the durable store was exercised against **local PostgreSQL 16**, never Azure PostgreSQL. *source: `docs/adr/0004-durable-action-lifecycle.md`*
 - **[wave2-http-queue]** — RESOLVED in phase 2. The durable queue is wired by default, so an approval now enqueues for real. **Service Bus itself is still not connected** — the file-backed queue is the transport; the same contract (`publish`/`receive`/`complete`/`fail`/`replay`) is what an Azure Service Bus adapter would implement. *source: `internal-portal/src/automation-queue.js`*
 - **[wave2-executor-simulated]** — the default executor is a **simulation** that returns `simulated: true` and touches nothing. A real executor must be injected explicitly; no privileged system has been acted on. *source: `internal-portal/src/automation-runtime.js`*
-- **[wave2-scope]** — only `tickets` and `assets` are tenant-scoped. **`problems` and `changes` are NOT**, and are deliberately not exposed to agent tools rather than exposed unscoped. *source: `internal-portal/src/tenant-scope.js`*
+- **[wave2-scope]** — RESOLVED in phase 4. `tickets`, `assets`, **`problems`** and
+  **`changes`** are all tenant-scoped: lists filter, single-row reads answer 404
+  across tenants, created rows are stamped, and change approval is a scoped
+  write. Three mutations (M-L12/M-L13/M-L14) reintroduce each leak and are all
+  caught. *source: `internal-portal/src/tenant-scope.js`,
+  `internal-portal/test/tenant-isolation.test.js`*
 - **[wave2-pg-tls]** — database TLS is resolved from configuration, but **no certificate is verified against a CA** on the default path (`rejectUnauthorized: false`, required for managed-provider certs). Tightening this needs the Azure CA bundle and is a Wave 5 item, not claimed here.
 
 ## 7. NOT YET MEASURED (fail-closed)

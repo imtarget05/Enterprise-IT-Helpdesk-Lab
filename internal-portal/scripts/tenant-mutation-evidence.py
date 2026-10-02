@@ -133,6 +133,27 @@ MUTATIONS = [
         "    if (!message.tenantId) {",
         "    if (false) {",
     ),
+    (
+        "M-L12",
+        "ITSM problems list served unscoped again",
+        "src/enterprise-routes.js",
+        "  app.get('/api/problems', (req, res) => res.json(rowsVisibleTo(store.data.problems, req.user)));",
+        "  app.get('/api/problems', (req, res) => res.json(store.data.problems));",
+    ),
+    (
+        "M-L13",
+        "ITSM changes list served unscoped again",
+        "src/enterprise-routes.js",
+        "  app.get('/api/changes', (req, res) => res.json(rowsVisibleTo(store.data.changes, req.user)));",
+        "  app.get('/api/changes', (req, res) => res.json(store.data.changes));",
+    ),
+    (
+        "M-L14",
+        "ITSM change approval becomes cross-tenant again",
+        "src/enterprise-routes.js",
+        "try { const row = findForUser('changes', req.params.id, 'Change', req); row.approvalState = 'APPROVED';",
+        "try { const row = find('changes', req.params.id, 'Change'); row.approvalState = 'APPROVED';",
+    ),
 ]
 
 

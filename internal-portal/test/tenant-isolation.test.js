@@ -264,3 +264,92 @@ describe('cross-tenant isolation — assets', () => {
     }
   });
 });
+
+describe('cross-tenant isolation — problems and changes (ITSM)', () => {
+  // These two collections were the last known unscoped area. They carried real
+  // sensitivity: root causes, workarounds, rollback plans and maintenance
+  // windows, all served whole to any authenticated caller.
+
+  test('a created problem is stamped with its creator tenant and hidden from others', async () => {
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const b = await tokenAs('b.admin', 'pw-b-admin');
+
+    const created = await client.json('POST', '/api/problems', {
+      title: 'tenant A known error', service: 'Identity', rootCause: 'internal detail A',
+    }, a);
+    assert.equal(created.status, 201);
+    assert.equal(created.data.tenant, TENANT_A);
+
+    const listB = await client.json('GET', '/api/problems', undefined, b);
+    assert.equal(listB.status, 200);
+    assert.ok(!listB.data.some((p) => p.id === created.data.id), 'tenant B saw tenant A\'s problem');
+    for (const row of listB.data) assert.equal(row.tenant, TENANT_B);
+
+    const cross = await client.json('GET', `/api/problems/${created.data.id}`, undefined, b);
+    assert.equal(cross.status, 404, 'a cross-tenant problem read must be indistinguishable from absent');
+    assert.ok(!JSON.stringify(cross.data).includes('internal detail A'), 'the 404 body leaked the root cause');
+  });
+
+  test('a created change is stamped and hidden, including its rollback plan', async () => {
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const b = await tokenAs('b.admin', 'pw-b-admin');
+
+    const created = await client.json('POST', '/api/changes', {
+      title: 'tenant A emergency change', risk: 'HIGH', rollbackPlan: 'secret rollback A',
+    }, a);
+    assert.equal(created.status, 201);
+    assert.equal(created.data.tenant, TENANT_A);
+
+    const listB = await client.json('GET', '/api/changes', undefined, b);
+    assert.ok(!listB.data.some((c) => c.id === created.data.id), 'tenant B saw tenant A\'s change');
+    assert.ok(!JSON.stringify(listB.data).includes('secret rollback A'), 'a rollback plan leaked across tenants');
+
+    const cross = await client.json('GET', `/api/changes/${created.data.id}`, undefined, b);
+    assert.equal(cross.status, 404);
+  });
+
+  test('a foreign change cannot be APPROVED — approval is a cross-tenant write', async () => {
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const b = await tokenAs('b.admin', 'pw-b-admin');
+    const created = await client.json('POST', '/api/changes', {
+      title: 'tenant A change to approve', risk: 'HIGH', rollbackPlan: 'plan A',
+    }, a);
+
+    const attack = await client.json('POST', `/api/changes/${created.data.id}/approve`, {}, b);
+    assert.equal(attack.status, 404, 'tenant B approved tenant A\'s change');
+
+    const still = await client.json('GET', `/api/changes/${created.data.id}`, undefined, a);
+    assert.notEqual(still.data.approvalState, 'APPROVED', 'the cross-tenant approval took effect');
+  });
+
+  test('a foreign problem cannot be edited', async () => {
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const b = await tokenAs('b.admin', 'pw-b-admin');
+    const created = await client.json('POST', '/api/problems', { title: 'tenant A problem to edit' }, a);
+
+    const attack = await client.json(
+      'PATCH', `/api/problems/${created.data.id}`, { rootCause: 'overwritten by B' }, b,
+    );
+    assert.equal(attack.status, 404, 'tenant B edited tenant A\'s problem');
+
+    const still = await client.json('GET', `/api/problems/${created.data.id}`, undefined, a);
+    assert.notEqual(still.data.rootCause, 'overwritten by B');
+  });
+
+  test('a problem may only link a ticket its own tenant can see', async () => {
+    const a = await tokenAs('a.admin', 'pw-a-admin');
+    const b = await tokenAs('b.admin', 'pw-b-admin');
+    const ticketA = await createTicket(a, 'tenant A ticket to link');
+    const problemB = await client.json('POST', '/api/problems', { title: 'tenant B problem' }, b);
+
+    // Tenant B must not be able to attach tenant A's ticket to its problem — the
+    // ticket lookup is already tenant-scoped, so this has to be refused.
+    const attack = await client.json(
+      'POST', `/api/problems/${problemB.data.id}/link-ticket`, { ticketId: ticketA.id }, b,
+    );
+    assert.equal(attack.status, 404, 'a cross-tenant ticket was linked');
+
+    const problem = await client.json('GET', `/api/problems/${problemB.data.id}`, undefined, b);
+    assert.ok(!problem.data.linkedTicketIds.includes(ticketA.id));
+  });
+});
