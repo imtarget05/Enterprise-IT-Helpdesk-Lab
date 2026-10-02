@@ -64,6 +64,22 @@ function parseUsers(raw) {
   }
 }
 
+/**
+ * Normalise a tenant identifier.
+ *
+ * `DEFAULT_TENANT` exists so that a single-tenant lab deployment keeps working
+ * unchanged, and so a row written before tenancy existed is still readable
+ * rather than becoming invisible. It is a compatibility value, NOT a security
+ * bypass: reaching it requires a token, and a tenant-scoped caller still only
+ * ever sees rows of its own tenant.
+ */
+const DEFAULT_TENANT = 'default';
+
+function normalizeTenant(value) {
+  const raw = String(value == null ? '' : value).trim();
+  return raw ? raw : DEFAULT_TENANT;
+}
+
 function rolePermissions(role) {
   return ROLE_PERMISSIONS[role] || [];
 }
@@ -105,14 +121,20 @@ function createAuth(options = {}) {
   const ttlMs = Number(options.sessionTtlMs || 8 * 60 * 60 * 1000);
   const now = typeof options.now === 'function' ? options.now : () => new Date();
 
-  function issue(username, role) {
+  /**
+   * A session carries its tenant, and the tenant comes from the CONFIGURED user
+   * record — never from a request header, query parameter or body field.
+   * Reading it from the request would let any authenticated caller claim to be
+   * any tenant, which turns tenant scoping into decoration.
+   */
+  function issue(username, role, tenant) {
     const token = crypto.randomBytes(32).toString('base64url');
-    sessions.set(token, { username, role, expiresAt: now().getTime() + ttlMs });
+    sessions.set(token, { username, role, tenant: normalizeTenant(tenant), expiresAt: now().getTime() + ttlMs });
     return token;
   }
 
   function authenticateRequest(req) {
-    if (mode === 'legacy') return { username: 'legacy-demo', role: ROLES.IT_ADMIN, legacy: true };
+    if (mode === 'legacy') return { username: 'legacy-demo', role: ROLES.IT_ADMIN, tenant: DEFAULT_TENANT, legacy: true };
     const header = String(req.headers.authorization || '');
     const match = header.match(/^Bearer\s+(.+)$/i);
     if (!match) return null;
@@ -121,7 +143,7 @@ function createAuth(options = {}) {
       sessions.delete(match[1]);
       return null;
     }
-    return { username: session.username, role: session.role };
+    return { username: session.username, role: session.role, tenant: session.tenant };
   }
 
   function hasPermission(user, permission) {
@@ -136,7 +158,7 @@ function createAuth(options = {}) {
   function requireAuth(permission) {
     return (req, res, next) => {
       if (mode === 'legacy') {
-        req.user = req.user || { username: 'legacy-demo', role: ROLES.IT_ADMIN, legacy: true };
+        req.user = req.user || { username: 'legacy-demo', role: ROLES.IT_ADMIN, tenant: DEFAULT_TENANT, legacy: true };
         return next();
       }
       if (!req.user) {
@@ -154,7 +176,8 @@ function createAuth(options = {}) {
     if (!user || !safeEqual(user.password, password)) return null;
     const role = String(user.role || ROLES.VIEWER).toUpperCase();
     if (!ROLE_PERMISSIONS[role]) return null;
-    return { token: issue(String(username), role), username: String(username), role, expiresInSeconds: Math.floor(ttlMs / 1000) };
+    const tenant = normalizeTenant(user.tenant);
+    return { token: issue(String(username), role, tenant), username: String(username), role, tenant, expiresInSeconds: Math.floor(ttlMs / 1000) };
   }
 
   function revoke(token) { sessions.delete(token); }
@@ -172,4 +195,4 @@ function createAuth(options = {}) {
   };
 }
 
-module.exports = { createAuth, resolveMode, MODES, ROLES, PERMISSIONS, ROLE_PERMISSIONS, rolePermissions };
+module.exports = { createAuth, resolveMode, normalizeTenant, DEFAULT_TENANT, MODES, ROLES, PERMISSIONS, ROLE_PERMISSIONS, rolePermissions };

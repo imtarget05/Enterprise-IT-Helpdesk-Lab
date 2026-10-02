@@ -1,0 +1,38 @@
+▶ cross-tenant isolation — tickets
+  ✔ a ticket is stamped with the creator's tenant, not a client-supplied one (80.389042ms)
+  ✔ a list request returns only the caller's own tenant (32.236667ms)
+  ✔ reading another tenant's ticket by id answers 404, not 403 (30.883583ms)
+  ✔ a query parameter cannot widen the result set back to all tenants (27.404709ms)
+  ✔ the CSV export is scoped too — an export must not be the side door (28.077792ms)
+✔ cross-tenant isolation — tickets (235.181375ms)
+▶ cross-tenant isolation — assets
+  ✔ an asset is stamped with the creator's tenant and hidden from other tenants (31.768083ms)
+  ✔ deleting another tenant's asset is refused, and the row survives (31.505166ms)
+  ✔ NEGATIVE CONTROL: an anonymous caller reaches no tenant data at all (1.221333ms)
+  ✔ a tenant A VIEWER gets READ for A and still nothing of B (36.015625ms)
+  ✔ NEGATIVE CONTROL: the AI agent routes ignore a client-named tenant (20.924833ms)
+  ✔ NEGATIVE CONTROL: legacy rows without a tenant belong to the default tenant only (5.154458ms)
+✔ cross-tenant isolation — assets (127.135916ms)
+ℹ tests 11
+ℹ suites 2
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 592.214958
+# Evidence — cross-tenant isolation control
+# date: 2026-10-02 (branch helpdesk/core-runtime)
+
+## SUITE: node --test test/tenant-isolation.test.js
+BASELINE  pass=11 fail=0
+M1  CAUGHT  pass=9 fail=2  tenant filter removed from GET /api/tickets (list unscoped)
+M2  CAUGHT  pass=10 fail=1  tenant filter removed from the ticket CSV export
+M3  CAUGHT  pass=10 fail=1  session tenant taken from a request header/query instead of the session
+M4  CAUGHT  pass=8 fail=3  single-row tenant equality check removed (foreign row becomes readable)
+M5  CAUGHT  pass=6 fail=5  created rows no longer stamped with the caller tenant
+M6  CAUGHT  pass=10 fail=1  AI agent route reads tenant from the request body again
+
+every mutation caught
+
+## MUTATION EVIDENCE: python3 scripts/tenant-mutation-evidence.py .

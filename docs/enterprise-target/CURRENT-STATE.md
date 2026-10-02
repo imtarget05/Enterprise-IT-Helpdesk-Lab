@@ -76,6 +76,58 @@ committed "green" numbers) exposed a genuine defect:
 Measured after the fix: no-DB **397 / 390 pass / 7 skipped / 0 fail**;
 with real PostgreSQL 16 **397 / 396 pass / 1 skipped / 0 fail**.
 
+### 4b. Defect found and closed on this pass — tenant was persisted but never enforced
+
+The ledger carried `cross_tenant_ticket/asset_access = 0` as **NOT_PRESENT**.
+Reading the code rather than the label confirmed it was worse than untested —
+tenant was not enforced at all:
+
+| | |
+|---|---|
+| **Sessions carried no tenant** | `auth.js` issued `{ username, role }`, so there was nothing to scope by |
+| **Read paths never filtered** | `enterprise-routes.js` filtered tickets on status/priority/source and assets on status/type and **never mentioned tenant**; `app.js` served `GET /api/tickets`, `GET /api/assets`, both `:id` routes and both CSV exports unscoped |
+| **The AI routes read tenant from the body** | `POST /api/ai/agent` and `/api/ai/agent/approve` passed `str(body.tenant) \|\| 'default'` straight into the agent, so any authenticated caller could drive the agent inside another tenant's context |
+
+The fix binds the tenant to the **session** at login from the configured user
+record — never from a header, query parameter or body — and enforces it in
+`internal-portal/src/tenant-scope.js` on every ticket and asset read, write and
+export. A row belonging to another tenant answers **404, not 403**: "this exists
+but is not yours" is itself a disclosure.
+
+Two design points worth naming:
+
+- **Legacy rows** (no `tenant` field) map to `default`, so pre-tenancy seeded
+  data stays visible instead of vanishing. It is a compatibility value, not a
+  bypass: the comparison is still an equality check, so a tenant-A caller can
+  never match a tenant-B row.
+- **The response is the stamped row.** An intermediate version inserted
+  `stampTenant(asset, ...)` into the store but still replied with the
+  pre-stamp literal, so the API reported a row without the tenant that was
+  actually persisted. The adversarial test caught this drift immediately.
+
+### 4c. The tenant control caught its own hollow test
+
+Mutation evidence: `internal-portal/scripts/tenant-mutation-evidence.py`
+
+| | Mutation | Result |
+|---|---|---|
+| M1 | tenant filter removed from `GET /api/tickets` | **CAUGHT** (2 fails) |
+| M2 | tenant filter removed from the ticket CSV export | **CAUGHT** (1 fail) |
+| M3 | session tenant read from a request header/query | **CAUGHT** (1 fail) |
+| M4 | single-row tenant equality check removed | **CAUGHT** (3 fails) |
+| M5 | created rows no longer stamped with the caller tenant | **CAUGHT** (5 fails) |
+| M6 | AI agent route reads tenant from the request body again | **CAUGHT** (1 fail) — *after the test was rewritten* |
+
+The first version of the M6 assertion only grepped the agent's response body for
+the tenant string. The agent does not echo it back, so **M6 SURVIVED** — a
+control that could not fail. The test was rewritten to assert an observable
+*effect*: long-term memory is keyed `${tenant}:${user}` and persisted to
+`agent-memory.json`, so the tenant the agent actually ran under is inspectable
+state rather than an absent string. The question also had to contain a phrase
+the memory extractors recognise, otherwise nothing was written and the negative
+assertions would have passed vacuously — which is why the test now asserts the
+*correct* keys are present too.
+
 ## 4. Security invariants — status after Wave 2
 
 | Invariant | Control (deterministic code + database) | Status |
@@ -85,7 +137,7 @@ with real PostgreSQL 16 **397 / 396 pass / 1 skipped / 0 fail**.
 | `unauthorized_privileged_execution = 0` | authorization re-derived from the **persisted** role, never from the queue message | **IMPLEMENTED_TESTED** |
 | `llm_raw_shell_execution = 0` | no executor path accepts a command string; raw-command fields fail proposal validation (catalog parity-tested against `llm-gateway`) | **IMPLEMENTED_TESTED** |
 | `secret_leakage = 0` (audit ledger) | `redact()` in the audit writer + negative control that plants a secret in an executor error | **IMPLEMENTED_TESTED** |
-| `cross_tenant_ticket/asset_access = 0` | tenant is persisted and scoped, but **no cross-tenant HTTP adversarial test yet** | **NOT_PRESENT** |
+| `cross_tenant_ticket/asset_access = 0` | tenant bound to the **session** at login (from the configured user record, never from a request field) and enforced in `tenant-scope.js` on every ticket/asset read, write and CSV export; 404-not-403 disclosure policy; 6 mutations all caught | **IMPLEMENTED_TESTED** |
 
 ## 5. Verified seams present in source
 
