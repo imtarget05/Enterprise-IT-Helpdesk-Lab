@@ -1,0 +1,40 @@
+▶ cross-tenant isolation — tickets
+  ✔ a ticket is stamped with the creator's tenant, not a client-supplied one (101.214791ms)
+  ✔ a list request returns only the caller's own tenant (29.374291ms)
+  ✔ reading another tenant's ticket by id answers 404, not 403 (31.061833ms)
+  ✔ a query parameter cannot widen the result set back to all tenants (29.624334ms)
+  ✔ the CSV export is scoped too — an export must not be the side door (36.70625ms)
+✔ cross-tenant isolation — tickets (265.708084ms)
+▶ cross-tenant isolation — assets
+  ✔ an asset is stamped with the creator's tenant and hidden from other tenants (31.862167ms)
+  ✔ deleting another tenant's asset is refused, and the row survives (34.097166ms)
+  ✔ NEGATIVE CONTROL: an anonymous caller reaches no tenant data at all (3.529625ms)
+  ✔ a tenant A VIEWER gets READ for A and still nothing of B (29.685292ms)
+  ✔ NEGATIVE CONTROL: the AI agent routes ignore a client-named tenant (18.39325ms)
+  ✔ NEGATIVE CONTROL: legacy rows without a tenant belong to the default tenant only (3.196875ms)
+✔ cross-tenant isolation — assets (121.173542ms)
+ℹ tests 11
+ℹ suites 2
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 578.528042
+BASELINE  pass=49 fail=0  (2 suites)
+M1  CAUGHT  fails=2  tenant filter removed from GET /api/tickets (list unscoped)
+M2  CAUGHT  fails=1  tenant filter removed from the ticket CSV export
+M3  CAUGHT  fails=1  session tenant taken from a request header/query instead of the session
+M4  CAUGHT  fails=4  single-row tenant equality check removed (foreign row becomes readable)
+M5  CAUGHT  fails=5  created rows no longer stamped with the caller tenant
+M6  CAUGHT  fails=1  AI agent route reads tenant from the request body again
+M7  CAUGHT  fails=1  agent's search_tickets reads the whole store again (side door around the HTTP filter)
+M8  CAUGHT  fails=2  agent's requireTicket reads any ticket by id again
+
+every mutation caught
+# Evidence - cross-tenant isolation control (HTTP + agent tools)
+# date: 2026-10-02 (branch helpdesk/core-runtime)
+
+## SUITE: node --test test/tenant-isolation.test.js
+
+## MUTATION EVIDENCE: python3 scripts/tenant-mutation-evidence.py .

@@ -400,13 +400,19 @@ test('orchestrator: parseAgentJson chịu được model bọc markdown', () => 
 // 5. TOOL — hành vi nghiệp vụ
 // ===========================================================================
 
+// Agent tools are TENANT-SCOPED. A caller without a tenant sees nothing — an
+// unscoped agent read fails closed rather than falling back to the whole store —
+// so these calls carry an explicit `DEFAULT_TENANT` caller, matching what the
+// orchestrator threads through from the session.
+const TENANT_CALLER = { user: 'agent-tester', tenant: 'default' };
+
 test('tools: search_tickets lọc theo từ khoá và ưu tiên ticket mức cao trước', async () => {
   await withStore(async (store) => {
     const tools = createToolRegistry({ store });
     store.append('tickets', { id: 9001, title: 'VPN mất kết nối', priority: 'High', priorityCode: 'P2', state: 'NEW', status: 'Open' });
     store.append('tickets', { id: 9002, title: 'VPN chậm', priority: 'Low', priorityCode: 'P4', state: 'NEW', status: 'Open' });
 
-    const out = await tools.invoke('search_tickets', { q: 'vpn' }, { store });
+    const out = await tools.invoke('search_tickets', { q: 'vpn' }, { store, ...TENANT_CALLER });
     assert.equal(out.ok, true);
     assert.ok(out.result.count >= 2);
     // Ưu tiên cao (P2) phải đứng trước P4.
@@ -415,17 +421,36 @@ test('tools: search_tickets lọc theo từ khoá và ưu tiên ticket mức cao
   });
 });
 
+test('tools: a caller with no tenant sees nothing — the agent read fails closed', async () => {
+  await withStore(async (store) => {
+    const tools = createToolRegistry({ store });
+    store.append('tickets', { id: 9101, title: 'VPN tenant-scoped canary', priority: 'High', priorityCode: 'P2', state: 'NEW', status: 'Open' });
+
+    // No `user`/`tenant` in ctx: the tool must return an empty result, NOT the
+    // whole store. Falling back to "everything" here would undo the HTTP tenant
+    // filter the moment a caller omits the context.
+    const unscoped = await tools.invoke('search_tickets', { q: 'canary' }, { store });
+    assert.equal(unscoped.ok, true);
+    assert.equal(unscoped.result.count, 0, 'an unscoped agent call saw rows it should not');
+
+    // And a foreign tenant cannot read the row by id.
+    const foreign = await tools.invoke('get_ticket', { id: 9101 }, { store, user: 'mallory', tenant: 'tenant-beta' });
+    assert.equal(foreign.ok, false);
+    assert.equal(foreign.code, 'not_found', 'a foreign tenant read a ticket by id');
+  });
+});
+
 test('tools: get_ticket trả chi tiết + SLA; ticket không tồn tại trả not_found', async () => {
   await withStore(async (store) => {
     const tools = createToolRegistry({ store });
     // Seed của portal đánh số ticket từ 1001; đọc id thật thay vì hard-code.
     const existing = store.data.tickets[0];
-    const ok = await tools.invoke('get_ticket', { id: existing.id }, { store });
+    const ok = await tools.invoke('get_ticket', { id: existing.id }, { store, ...TENANT_CALLER });
     assert.equal(ok.ok, true);
     assert.equal(ok.result.ticket.id, existing.id);
     assert.ok(typeof ok.result.sla.remainingMinutes === 'number');
 
-    const missing = await tools.invoke('get_ticket', { id: 999999 }, { store });
+    const missing = await tools.invoke('get_ticket', { id: 999999 }, { store, ...TENANT_CALLER });
     assert.equal(missing.ok, false);
     assert.equal(missing.code, 'not_found');
   });

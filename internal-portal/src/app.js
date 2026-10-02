@@ -21,7 +21,8 @@ const { createNotifier } = require('./notify');
 const { toCsv, auditFilename, ASSET_COLUMNS } = require('./csv');
 const { createAi } = require('./ai');
 const { createAgent } = require('./agent');
-const { createAuth, PERMISSIONS } = require('./auth');
+const { createAuth, PERMISSIONS, normalizeTenant } = require('./auth');
+const { rowsVisibleTo, findVisible } = require('./tenant-scope');
 const { registerEnterpriseRoutes } = require('./enterprise-routes');
 
 // --- CORS allowlist -------------------------------------------------------------------
@@ -284,7 +285,9 @@ async function createApp(options = {}) {
   const ASSET_SEARCH_FIELDS = ['tag', 'type', 'brand', 'model', 'serial', 'assignedTo', 'dept', 'status', 'ip'];
 
   function assetSearch(req) {
-    return filterRows(store.data.assets, req.query, ASSET_SEARCH_FIELDS);
+    // Tenant-scoped: an export must not become the side door around the
+    // tenant filter that GET /api/assets applies.
+    return filterRows(rowsVisibleTo(store.data.assets, req.user), req.query, ASSET_SEARCH_FIELDS);
   }
 
   app.get('/api/assets/export.csv', async (req, res, next) => {
@@ -305,16 +308,19 @@ async function createApp(options = {}) {
     }
   });
 
+  // Tenant-scoped with the 404 disclosure policy: an asset owned by another
+  // tenant must be indistinguishable from one that does not exist.
   app.get('/api/assets/:id', (req, res, next) => {
-    const asset = store.find('assets', req.params.id);
-    if (!asset) return next(notFound('Tài sản', req.params.id));
-    res.json(asset);
+    const hit = findVisible(store.data.assets, req.user, req.params.id);
+    if (!hit.found) return next(notFound('Tài sản', req.params.id));
+    res.json(hit.row);
   });
 
   app.delete('/api/assets/:id', async (req, res, next) => {
     try {
-      const asset = store.find('assets', req.params.id);
-      if (!asset) throw notFound('Tài sản', req.params.id);
+      const hit = findVisible(store.data.assets, req.user, req.params.id);
+      if (!hit.found) throw notFound('Tài sản', req.params.id);
+      const asset = hit.row;
       store.remove('assets', asset.id);
       await store.commit();
       console.log(`[assets] Xoá ${asset.tag} (id ${asset.id})`);
@@ -326,7 +332,7 @@ async function createApp(options = {}) {
 
   // ========================= HELPDESK TICKETS =========================
   const TICKET_SEARCH_FIELDS = ['title', 'requester', 'dept', 'category', 'status', 'priority'];
-  const ticketSearch = (req) => filterRows(store.data.tickets, req.query, TICKET_SEARCH_FIELDS);
+  const ticketSearch = (req) => filterRows(rowsVisibleTo(store.data.tickets, req.user), req.query, TICKET_SEARCH_FIELDS);
 
   app.get('/api/tickets/export.csv', (req, res) => {
     const rows = ticketSearch(req);
@@ -464,7 +470,10 @@ async function createApp(options = {}) {
         question,
         sessionId: str(body.sessionId) || `api-${req.user.username}`,
         user: str(req.user.username),
-        tenant: str(body.tenant) || 'default',
+        // Tenant comes from the SESSION, never from body.tenant: an AI route
+        // that accepts a client-named tenant would let any caller drive the
+        // agent inside another tenant's context.
+        tenant: normalizeTenant(req.user.tenant),
         requester: str(req.user.username),
       });
       res.json(result);
@@ -491,7 +500,9 @@ async function createApp(options = {}) {
       const outcome = await agent.approve({
         token,
         user: str(req.user.username),
-        tenant: str(body.tenant) || 'default',
+        // Session tenant, same reasoning as POST /api/ai/agent: an approval
+        // decision must not be attributable to a tenant the caller named.
+        tenant: normalizeTenant(req.user.tenant),
         requester: str(req.user.username),
       });
       if (!outcome.ok) {
