@@ -212,10 +212,24 @@ function createToolRegistry(options = {}) {
         // toàn bộ corpus qua Ollama (10s/chunk, hàng chụs chunk → hàng phút),
         // vốn làm treo request agent trong demo offline.
         const fetchImpl = (ctx || {}).fetchImpl;
-        const hits = await retrieve(str(args.query), 3, { memoryOnly: !fetchImpl, fetchImpl });
+        // `tenantId` comes from the agent context, which the orchestrator fills
+        // from the authenticated session. Retrieval refuses to run without one,
+        // so an agent tool call with no tenant returns nothing rather than the
+        // whole corpus.
+        const hits = await retrieve(str(args.query), 3, {
+          memoryOnly: !fetchImpl,
+          fetchImpl,
+          tenantId: (ctx || {}).tenant,
+        });
         return {
           context: formatContext(hits),
-          sources: hits.map((h) => ({ source: h.source, section: h.section, score: Number(h.score || 0).toFixed(4) })),
+          sources: hits.map((h) => ({
+            source: h.source,
+            section: h.section,
+            chunkId: h.chunkId,
+            version: h.version,
+            score: Number(h.score || 0).toFixed(4),
+          })),
         };
       },
     },
