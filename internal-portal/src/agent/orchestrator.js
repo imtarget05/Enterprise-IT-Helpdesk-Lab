@@ -22,6 +22,7 @@
  */
 
 const { PLAYBOOKS, DEFAULT_PLAYBOOK } = require('../ai-playbooks');
+const { createAgentBudget, BUDGET_CODES } = require('./budget');
 
 const MAX_STEPS = 4;
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -162,6 +163,22 @@ function createOrchestrator(options = {}) {
    * status ∈ answered | needs_approval | needs_clarification | blocked
    */
   async function run({ question, sessionId, user, tenant, requester }) {
+    // A fresh budget per run. Limits are enforced against the ACTUAL loop, not
+    // against a step counter that a repeating tool call can exhaust without ever
+    // making progress.
+    const budget = createAgentBudget({
+      maxSteps,
+      maxToolCalls: options.maxToolCalls,
+      wallClockMs: options.agentWallClockMs,
+      maxTokens: options.agentMaxTokens,
+      maxCostUsd: options.agentMaxCostUsd,
+      loopThreshold: options.agentLoopThreshold,
+    });
+    // Set when a limit stops the run, so the answer can say it was stopped
+    // rather than pretending it finished. A stopped agent that answers anyway is
+    // an agent that invented its way past the limit.
+    let stoppedBy = null;
+
     const guarded = inputGuard.check(question);
     if (!guarded.ok) {
       return {
@@ -186,6 +203,12 @@ function createOrchestrator(options = {}) {
     let proposedAction = null;
 
     for (let step = 0; step < maxSteps; step += 1) {
+      const stepBreach = budget.consumeStep();
+      if (stepBreach) {
+        stoppedBy = stepBreach;
+        trace.push({ step, phase: 'budget', tool: null, ok: false, error: stepBreach.code, detail: stepBreach.detail });
+        break;
+      }
       // ---- PLAN ---------------------------------------------------------
       let current;
       if (llm) {
@@ -212,6 +235,18 @@ function createOrchestrator(options = {}) {
       const toolName = str(plan.nextTool);
       if (toolName && tools.isAutoAllowed(toolName)) {
         const args = plan.args && typeof plan.args === 'object' ? plan.args : {};
+
+        // The loop guard runs BEFORE the tool is invoked, so a repeating call is
+        // stopped rather than merely counted. `maxToolCalls` is enforced here
+        // too: steps and tool calls are different axes, and an agent that makes
+        // two tool calls per step halves its effective step budget.
+        const callBreach = budget.consumeToolCall(toolName, args);
+        if (callBreach) {
+          stoppedBy = callBreach;
+          trace.push({ step, phase: 'budget', tool: toolName, ok: false, error: callBreach.code, detail: callBreach.detail });
+          break;
+        }
+
         // `tenant` MUST be in ctx: the tools that read tickets/assets scope
         // themselves by it. Omitting it here made every agent run read the
         // whole store regardless of who asked.
@@ -238,15 +273,25 @@ function createOrchestrator(options = {}) {
       break; // Hết tool cần chạy → sang UPDATE dựng câu trả lời.
     }
 
-    return finish({ plan, observations, trace, proposedAction, cleanQuestion, sid, user, tenant, learned });
+    return finish({ plan, observations, trace, proposedAction, cleanQuestion, sid, user, tenant, learned, budget, stoppedBy });
   }
 
   /**
    * UPDATE — dựng câu trả lời cuối, mở cổng duyệt nếu có hành động ghi.
    * Tách riêng khỏi `run` để vòng lặp chỉ lo PLAN/ACT/OBSERVE.
    */
-  function finish({ plan, observations, trace, proposedAction, cleanQuestion, sid, user, tenant, learned }) {
+  function finish({ plan, observations, trace, proposedAction, cleanQuestion, sid, user, tenant, learned, budget, stoppedBy }) {
     let answer = str(plan && plan.answer);
+
+    // When a budget stopped the run, the plan has no answer because the loop
+    // never got one. Synthesising one anyway would be the agent inventing a
+    // conclusion past the limit, so the answer says plainly that it was stopped
+    // and the trace carries the reason code.
+    const stopped = stoppedBy || null;
+    if (!answer && stopped) {
+      answer = `Bị dừng do giới hạn an toàn (${stopped.code}${stopped.detail ? `: ${stopped.detail}` : ''}). Không đủ dữ liệu để kết luận.`;
+    }
+
     if (!answer) {
       const pb = PLAYBOOKS.find((p) => p.match && p.match.test(cleanQuestion)) || DEFAULT_PLAYBOOK;
       answer = observations.length
@@ -283,6 +328,18 @@ function createOrchestrator(options = {}) {
       trace,
       proposedAction: pending,
       memory: { learned: learned.map((l) => l.content), recalled: memory.recall(user, tenant).length },
+      // Budget accounting is part of the answer, not internal telemetry: a
+      // caller can tell whether the agent completed or was stopped, and by which
+      // limit, without reading the trace.
+      //
+      // `stoppedBy` comes from the variable the loop set, NOT from a fresh
+      // `breachReason()` call: by the time the run finishes, the counters may no
+      // longer sit at the limit (a loop guard fires without any ceiling being
+      // reached), and re-deriving it would report "nothing stopped this run".
+      budget: budget
+        ? { ...budget.usage(), stoppedBy: stopped ? stopped.code : null }
+        : null,
+      stoppedBy: stopped ? stopped.code : null,
     };
   }
 
