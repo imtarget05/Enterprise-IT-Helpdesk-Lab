@@ -127,11 +127,18 @@ function createAi(options = {}) {
   const openaiModel = str(options.openaiModel || process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL);
 
   /** RAG: top-3 đoạn runbook công ty ghép vào prompt để LLM
-   *  trả lời đúng quy trình nội bộ thay vì bịa kiến thức chung. */
-  async function getRag(ticket) {
+   *  trả lời đúng quy trình nội bộ thay vì bịa kiến thức chung.
+   *
+   *  Retrieval is tenant-scoped. `retrieve` refuses to run without a tenant, so
+   *  a ticket analysed without one gets no knowledge-base context rather than
+   *  another tenant's. This is why `tenant` is threaded into the client factory
+   *  rather than read from ambient state. */
+  async function getRag(ticket, tenantId = null) {
     try {
       const q = [ticket.title, ticket.category, ticket.description].map(str).filter(Boolean).join(' ');
-      const ragHits = await retrieve(q, 3, { fetchImpl });
+      // No tenant → no retrieval (see `retrieve`). A ticket analysed without a
+      // tenant gets generic playbook help instead of someone's private runbook.
+      const ragHits = await retrieve(q, 3, { fetchImpl, tenantId });
       return { ragHits, ragCtx: formatContext(ragHits) };
     } catch {
       return { ragHits: [], ragCtx: '' };
@@ -289,9 +296,27 @@ function createAi(options = {}) {
     /**
      * POST /api/ai/analyze — OpenAI cloud → LM Studio/Ollama local + RAG →
      * playbook rule-based kèm nguồn RAG. Luôn 200 khi input hợp lệ.
-     */    async analyze(ticket) {
-      const ragOf = (hits) => ({ hits: hits.length, sources: hits.map((h) => h.source).filter(Boolean) });
-      const { ragHits, ragCtx } = await getRag(ticket);
+     *
+     * `ctx` carries the tenant of the authenticated caller. Retrieval is scoped
+     * to it, so this endpoint cannot be used to pull another tenant's knowledge
+     * base by asking about a shared-looking subject. The tenant is a parameter
+     * rather than ambient state precisely so a test can assert the refusal.
+     */
+    async analyze(ticket, ctx = {}) {
+      const tenantId = ctx.tenant || null;
+      const ragOf = (hits) => ({
+        hits: hits.length,
+        // Citations, not bare paths: chunkId + version is what makes an answer
+        // traceable back to exact retrieved text after the fact.
+        sources: hits.map((h) => ({
+          source: h.source,
+          section: h.section,
+          chunkId: h.chunkId,
+          version: h.version,
+          score: Number(h.score || 0).toFixed(4),
+        })),
+      });
+      const { ragHits, ragCtx } = await getRag(ticket, tenantId);
       // Tầng local: LM Studio (OpenAI-compat) khi LLM_PROVIDER=lmstudio, còn lại Ollama.
       const localEngine = useLmStudio ? 'lmstudio' : 'ollama';
       const localChat = () => (useLmStudio

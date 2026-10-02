@@ -442,8 +442,12 @@ async function createApp(options = {}) {
       let ticket = null;
 
       if (body.ticketId !== undefined && body.ticketId !== null && str(body.ticketId) !== '') {
-        ticket = store.find('tickets', body.ticketId);
-        if (!ticket) throw notFound('Ticket', body.ticketId);
+        // Tenant-scoped: an analysis must not be able to name another tenant's
+        // ticket id and receive its content back. A foreign or unscoped ticket
+        // is reported as 404, matching every other read path.
+        const hit = findVisible(store.data.tickets, req.user, body.ticketId);
+        if (!hit.found) throw notFound('Ticket', body.ticketId);
+        ticket = hit.row;
       } else if (!str(body.title)) {
         throw httpError(400, 'Thiếu dữ liệu phân tích.', ['Cần ticketId hoặc title trong body.']);
       }
@@ -456,7 +460,7 @@ async function createApp(options = {}) {
         category: str(body.category) || 'General',
       };
 
-      const analysis = await ai.analyze(input);
+      const analysis = await ai.analyze(input, { tenant: (req.user || {}).tenant });
       res.json({ ticketId: ticket ? ticket.id : null, ...analysis });
     } catch (err) {
       next(err);
