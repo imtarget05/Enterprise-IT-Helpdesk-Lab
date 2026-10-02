@@ -15,7 +15,11 @@ describe('Service Bus worker with a governed lifecycle bridge', () => {
     const executed = [];
     const lifecycle = createActionLifecycle({
       store,
-      executor: { async run(req) { executed.push(req.action); return { ok: true, postCheck: { ok: true } }; } },
+      // `postCheck` must carry `verified` for the lifecycle to treat it as proof.
+// The old shape here was `{ ok: true }`, which the previous check
+// (`postCheck !== false`) accepted as success by accident — an object with no
+// verdict at all. A post-check that cannot say "verified" is not evidence.
+      executor: { async run(req) { executed.push(req.action); return { ok: true, postCheck: { verified: true } }; } },
     });
 
     const proposed = await lifecycle.propose({

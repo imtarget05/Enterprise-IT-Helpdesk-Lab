@@ -43,10 +43,12 @@ Phase-1 commit `8838e03` was a duplicate of already-landed PR #3 and was
 
 | Suite | Command | Result |
 |---|---|---|
-| Node portal | `cd internal-portal && npm test` | **397 — 390 pass, 7 skipped, 0 fail** |
-| Node portal, with a real DB | `LIFECYCLE_PG_URL='postgres://…@127.0.0.1:55432/postgres?sslmode=disable' npm test` | **397 — 396 pass, 1 skipped, 0 fail** |
+| Node portal | `cd internal-portal && npm test` | **439 — 432 pass, 7 skipped, 0 fail** |
+| Node portal, with a real DB | `LIFECYCLE_PG_URL='postgres://…@127.0.0.1:55432/postgres?sslmode=disable' npm test` | **439 — 438 pass, 1 skipped, 0 fail** |
 | Governed lifecycle (unit) | `node --test test/action-lifecycle.test.js` | **31/31** |
 | Governed lifecycle (REAL PostgreSQL 16) | `LIFECYCLE_PG_URL=…?sslmode=disable node --test test/action-lifecycle-postgres.test.js` | **6/6** |
+| TOCTOU binding | `node --test test/lifecycle-toctou.test.js` | **15/15** |
+| Governed lifecycle over HTTP (E2E) | `node --test test/automation-http.test.js` | **15/15** (CASE 1–10) |
 | PostgreSQL TLS resolution + pool wiring | `node --test test/lifecycle-tls.test.js` | **8/8** (3 mutations caught, see below) |
 | Auth fail-closed | `node --test test/auth-failclosed.test.js` | **5/5** |
 | Service Bus bridge | `node --test test/servicebus-lifecycle-bridge.test.js` | **3/3** |
@@ -82,6 +84,57 @@ check was disabled and nothing was force-pushed.** Two consequences stay open:
 - **[sonar-new-code-rating-unknown]** — until that is fixed, "no reliability
   bugs on new code" is **not a claim this repo can make**. The Node/Python suites
   and the mutation evidence are the signals actually available.
+
+### 4e. Governed lifecycle over HTTP, and two real defects it exposed
+
+The lifecycle existed (`action-lifecycle.js`, ~500 lines, full state machine) but
+had **no HTTP surface**, so a new consumer would have been pushed toward
+reaching into the store directly. It is now reachable, and the routes are thin:
+they validate shape, derive identity from the session, and hand the decision to
+the lifecycle. **There is no `/execute` endpoint**, by design — approving makes a
+proposal queueable, the worker performs the side effect.
+
+| Endpoint | Permission | Authority source |
+|---|---|---|
+| `POST /api/automation/proposals` | `ticket:write` | session tenant + role table |
+| `GET /api/automation/proposals/:id` | `read` | session tenant, 404 across tenants |
+| `POST /api/automation/proposals/:id/approve` | `change:approve` | session tenant + separation of duties |
+| `POST /api/automation/proposals/:id/reject` | `change:approve` | session tenant |
+
+Two defects surfaced while building it, both of which had been invisible before:
+
+**1. There was no TOCTOU binding at all.** Nothing tied an approval to the payload
+that would run, so a proposal could be approved and then edited before execution.
+Added: a canonical-JSON SHA-256 over `{action, parameters}` written at creation
+(migration `002_payload_hash.sql`), copied onto the approval row, and re-verified
+both before queueing **and** again in the worker before the executor is reached.
+
+**2. A failed post-check was reported as success.** The check was
+`outcome.postCheck !== false`, so `{ verified: false, why: 'target still enabled' }`
+passed — only a literal `false` failed. That is exactly the "exit code 0 is not
+proof" failure this stage exists to prevent. Replaced with `isPostCheckVerified()`,
+which requires an explicit verdict and treats a verdict-less object as UNVERIFIED.
+
+The second defect is the more instructive one: **no unit test caught it**,
+because every unit-test executor returned `{ verified: true }`. It was found by
+CASE 10 of the HTTP end-to-end suite, using an executor that fails its post-check.
+It then exposed a third, smaller thing — a test that had been returning
+`postCheck: { ok: true }`, an object with no verdict at all, and passing *because
+of* the bug.
+
+### 4f. Two controls that had teeth removed by vague assertions
+
+Mutation evidence now runs 11 mutations across 4 suites (baseline 95 pass / 0
+fail). Two initially SURVIVED, and both failures were the same mistake on my part:
+
+| | Mutation | First result | Cause | Fix |
+|---|---|---|---|---|
+| M-L4 | `enqueue`'s TOCTOU gate removed | **SURVIVED** | the test asserted `code ∈ [PAYLOAD_MODIFIED, APPROVAL_PAYLOAD_MISMATCH]` — the second check was still firing, so the test passed with the first deleted | assert the **exact** code, and add a separate test where the tamperer repairs the self-consistency so only the approval hash can catch it |
+| M-L7 | worker stops checking the catalog | **SURVIVED** | no test could produce a row with an out-of-catalog action, because `propose()` refuses to create one | plant the row directly, as a compromised queue/DB writer would |
+
+Both were cases of a test passing for the *wrong reason*. The lesson generalises:
+asserting a union of acceptable outcomes is how a control quietly stops being
+tested.
 
 Evidence: `docs/testing/evidence/2026-10-02-core-runtime-node-suite.log` (committed).
 
@@ -190,7 +243,10 @@ assertions would have passed vacuously — which is why the test now asserts the
 
 - **[helpdesk-capability-gaps]** — (1) no role-based access on portal routes, (2) no alert/ticket dedupe, (3) SLA is `slaPercent` only, no clock-based breach. *source: `docs/PORTFOLIO-COMPLETION-AUDIT-v2.md`*
 - **[helpdesk-azure-boundary]** — the live footprint is narrow: `authMode: "lab"`, mock webhook. Any "live RBAC / durable approval" claim must restate it. *source: `docs/PORTFOLIO-FLAGSHIP-MATRIX.md`*
-- **[wave2-boundaries]** — the durable store was exercised against **local PostgreSQL 16**, never Azure PostgreSQL; the governed pipeline is **not yet reachable over HTTP** (next Wave 2 step — not claimed here). *source: `docs/adr/0004-durable-action-lifecycle.md`*
+- **[wave2-boundaries]** — the durable store was exercised against **local PostgreSQL 16**, never Azure PostgreSQL. *source: `docs/adr/0004-durable-action-lifecycle.md`*
+- **[wave2-http-queue]** — the HTTP approval path calls `lifecycle.enqueue()` and then `queue.publish()` **when a queue is injected**. With no queue configured the proposal is left in `APPROVED` and the response carries `queued: false`. **Service Bus publishing is not verified live**; only the repository abstraction is exercised. *source: `internal-portal/src/automation-routes.js`*
+- **[wave2-executor-simulated]** — the default executor is a **simulation** that returns `simulated: true` and touches nothing. A real executor must be injected explicitly; no privileged system has been acted on. *source: `internal-portal/src/automation-runtime.js`*
+- **[wave2-scope]** — only `tickets` and `assets` are tenant-scoped. **`problems` and `changes` are NOT**, and are deliberately not exposed to agent tools rather than exposed unscoped. *source: `internal-portal/src/tenant-scope.js`*
 - **[wave2-pg-tls]** — database TLS is resolved from configuration, but **no certificate is verified against a CA** on the default path (`rejectUnauthorized: false`, required for managed-provider certs). Tightening this needs the Azure CA bundle and is a Wave 5 item, not claimed here.
 
 ## 7. NOT YET MEASURED (fail-closed)
@@ -198,8 +254,8 @@ assertions would have passed vacuously — which is why the test now asserts the
 - Azure live revision / image digest .... **UNMEASURED this pass**
 - privilege separation / multi-replica behavior in Azure .... **UNMEASURED**
 - cost exposure ......................... **UNMEASURED**
-- governed lifecycle over HTTP ......... **NOT_PRESENT**
-- cross-tenant adversarial control ..... **NOT_PRESENT**
+- governed lifecycle over HTTP ......... **PRESENT** (`POST /api/automation/proposals`, `GET .../:id`, `POST .../approve`, `POST .../reject`; no execute route by design)
+- cross-tenant adversarial control ..... **IMPLEMENTED_TESTED** (10 HTTP E2E cases + 8 tenant mutations)
 
 CARRIED_FORWARD_NOT_REMEASURED (audit docs only): earlier local suite `137 passed / 0 failed`; restore-drill PASS on a `/tmp` fixture (AD part NOT_RUN). Do NOT quote as verified.
 

@@ -28,7 +28,7 @@ const crypto = require('node:crypto');
 
 const { Pool } = require('pg');
 
-const { assertTransition, STATES } = require('./action-catalog');
+const { assertTransition, STATES, proposalPayloadHash } = require('./action-catalog');
 
 const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 const UNIQUE_VIOLATION = '23505';
@@ -129,6 +129,7 @@ function createPostgresLifecycleStore(options = {}) {
       requestedByRole: row.requested_by_role,
       correlationId: row.correlation_id,
       proposalSource: row.proposal_source,
+      payloadHash: row.payload_hash,
       createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
       updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     };
@@ -142,15 +143,17 @@ function createPostgresLifecycleStore(options = {}) {
 
     async createProposal(row) {
       const proposalId = crypto.randomUUID();
+      const payloadHash = row.payloadHash || proposalPayloadHash(row);
       const res = await pool.query(
         `INSERT INTO action_proposal
            (proposal_id, tenant_id, ticket_id, action, parameters, risk, state,
-            requested_by, requested_by_role, correlation_id, proposal_source)
-         VALUES ($1,$2,$3,$4,$5::jsonb,$6,'PROPOSED',$7,$8,$9,$10)
+            requested_by, requested_by_role, correlation_id, proposal_source, payload_hash)
+         VALUES ($1,$2,$3,$4,$5::jsonb,$6,'PROPOSED',$7,$8,$9,$10,$11)
          RETURNING *`,
         [proposalId, row.tenantId, row.ticketId || null, row.action,
           JSON.stringify(row.parameters || {}), row.risk, row.requestedBy,
-          row.requestedByRole, row.correlationId, row.proposalSource || 'human'],
+          row.requestedByRole, row.correlationId, row.proposalSource || 'human',
+          payloadHash],
       );
       return mapProposal(res.rows[0]);
     },
@@ -158,6 +161,25 @@ function createPostgresLifecycleStore(options = {}) {
     async getProposal(proposalId) {
       const res = await pool.query('SELECT * FROM action_proposal WHERE proposal_id = $1', [proposalId]);
       return mapProposal(res.rows[0]);
+    },
+
+    /** The approval recorded for a proposal, or null (TOCTOU gate). */
+    async getApproval(proposalId) {
+      const res = await pool.query('SELECT * FROM action_approval WHERE proposal_id = $1', [proposalId]);
+      const a = res.rows[0];
+      if (!a) return null;
+      return {
+        approvalId: a.approval_id,
+        proposalId: a.proposal_id,
+        decision: a.decision,
+        approver: a.approver,
+        approverRole: a.approver_role,
+        proposer: a.proposer,
+        isSelfApproval: a.is_self_approval,
+        reason: a.reason,
+        approvedPayloadHash: a.approved_payload_hash,
+        decidedAt: a.decided_at instanceof Date ? a.decided_at.toISOString() : a.decided_at,
+      };
     },
 
     /** Row-locked transition: two replicas cannot both move the same proposal. */
@@ -193,11 +215,12 @@ function createPostgresLifecycleStore(options = {}) {
         const res = await pool.query(
           `INSERT INTO action_approval
              (approval_id, proposal_id, decision, approver, approver_role, proposer,
-              is_self_approval, reason)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              is_self_approval, reason, approved_payload_hash)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
            RETURNING *`,
           [approvalId, row.proposalId, row.decision, row.approver, row.approverRole,
-            row.proposer, Boolean(row.isSelfApproval), row.reason || ''],
+            row.proposer, Boolean(row.isSelfApproval), row.reason || '',
+            row.payloadHash || ''],
         );
         const a = res.rows[0];
         return {
@@ -211,6 +234,7 @@ function createPostgresLifecycleStore(options = {}) {
             proposer: a.proposer,
             isSelfApproval: a.is_self_approval,
             reason: a.reason,
+            approvedPayloadHash: a.approved_payload_hash,
             decidedAt: a.decided_at.toISOString(),
           },
         };

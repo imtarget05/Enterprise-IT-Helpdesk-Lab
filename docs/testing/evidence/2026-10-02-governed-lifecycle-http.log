@@ -1,0 +1,91 @@
+▶ CASE 1 — low risk runs without approval, but still not from HTTP
+  ✔ a LOW_RISK proposal is authorised immediately and is not queueable without a queue (41.2705ms)
+✔ CASE 1 — low risk runs without approval, but still not from HTTP (85.741ms)
+▶ CASE 2 — high risk parks at approval and executes only in the worker
+  ✔ proposal -> pending approval -> approve -> queued, with no HTTP execution (18.957875ms)
+✔ CASE 2 — high risk parks at approval and executes only in the worker (19.129958ms)
+▶ CASE 3 — rejection produces no execution
+  ✔ a rejected proposal can never be queued or executed (14.11075ms)
+✔ CASE 3 — rejection produces no execution (14.268042ms)
+▶ CASE 4/5 — cross-tenant read and approval are hidden, not forbidden
+  ✔ tenant B cannot read tenant A's proposal (404, not 403) (9.632916ms)
+  ✔ tenant B cannot approve tenant A's proposal (12.37ms)
+  ✔ a nonexistent proposal and a foreign one answer identically (9.715209ms)
+✔ CASE 4/5 — cross-tenant read and approval are hidden, not forbidden (32.029875ms)
+▶ CASE 6 — RBAC
+  ✔ a VIEWER may not propose automation (3.494084ms)
+  ✔ an anonymous caller is refused (3.133ms)
+  ✔ an IT_ADMIN proposer cannot approve their OWN high-risk action (7.807292ms)
+  ✔ NEGATIVE CONTROL: body.tenant cannot override the session tenant (6.809209ms)
+✔ CASE 6 — RBAC (21.533167ms)
+▶ CASE 7 — a duplicate approval produces one decision and one execution
+  ✔ approving twice is refused the second time (15.28675ms)
+  ✔ a duplicate queue delivery executes exactly once (13.644958ms)
+✔ CASE 7 — a duplicate approval produces one decision and one execution (29.08475ms)
+▶ CASE 8 — the worker refuses a forged queue message
+  ✔ a message for an unapproved high-risk action never reaches the executor (5.395666ms)
+✔ CASE 8 — the worker refuses a forged queue message (5.479916ms)
+▶ CASE 9 — a proposal edited after approval cannot be queued
+  ✔ the TOCTOU gate fires on an HTTP-created proposal (9.604625ms)
+✔ CASE 9 — a proposal edited after approval cannot be queued (9.693958ms)
+▶ CASE 10 — a post-check failure is not a success
+  ✔ the final state is FAILED when the executor cannot verify the condition (28.532917ms)
+✔ CASE 10 — a post-check failure is not a success (28.663459ms)
+ℹ tests 15
+ℹ suites 9
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 558.038875
+▶ payload hash — the fingerprint itself
+  ✔ key order does not change the hash (canonical JSON) (0.724834ms)
+  ✔ changing the action changes the hash (0.112209ms)
+  ✔ changing a nested parameter changes the hash (0.07625ms)
+  ✔ NEGATIVE CONTROL: a missing or empty hash never matches (0.084125ms)
+  ✔ descriptive fields are outside the fingerprint on purpose (0.081667ms)
+✔ payload hash — the fingerprint itself (1.725834ms)
+▶ TOCTOU — a high-risk proposal cannot be edited after approval
+  ✔ the approval records the hash of the payload it signed (2.09925ms)
+  ✔ EDIT AFTER APPROVAL: enqueue refuses and nothing is queued (0.324ms)
+  ✔ EDIT AFTER APPROVAL: the approval hash also blocks a queued-but-changed job (0.331709ms)
+  ✔ EDIT AFTER APPROVAL: the worker refuses even when a job is already queued (0.755875ms)
+  ✔ an UNCHANGED proposal still executes — the gate discriminates (0.600167ms)
+✔ TOCTOU — a high-risk proposal cannot be edited after approval (4.319417ms)
+▶ TOCTOU — the worker does not trust the queue message
+  ✔ NEGATIVE CONTROL: an action outside the catalog is refused (0.160584ms)
+  ✔ NEGATIVE CONTROL: a high-risk job with no approval row is refused (0.337292ms)
+  ✔ NEGATIVE CONTROL: a REJECTED approval does not authorise execution (0.219125ms)
+  ✔ NEGATIVE CONTROL: a row planted with an out-of-catalog action never reaches the executor (0.173291ms)
+  ✔ the refusal is audited, not silent (0.133625ms)
+✔ TOCTOU — the worker does not trust the queue message (1.141666ms)
+ℹ tests 15
+ℹ suites 3
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 82.495875
+BASELINE  pass=95 fail=0  (4 suites)
+M1  CAUGHT  fails=2  tenant filter removed from GET /api/tickets (list unscoped)
+M2  CAUGHT  fails=1  tenant filter removed from the ticket CSV export
+M3  CAUGHT  fails=1  session tenant taken from a request header/query instead of the session
+M4  CAUGHT  fails=4  single-row tenant equality check removed (foreign row becomes readable)
+M5  CAUGHT  fails=5  created rows no longer stamped with the caller tenant
+M6  CAUGHT  fails=1  AI agent route reads tenant from the request body again
+M7  CAUGHT  fails=1  agent's search_tickets reads the whole store again (side door around the HTTP filter)
+M8  CAUGHT  fails=2  agent's requireTicket reads any ticket by id again
+M-L4  CAUGHT  fails=1  enqueue's TOCTOU gate removed (a proposal edited after approval gets queued)
+M-L6  CAUGHT  fails=1  worker trusts an unapproved queue message (approval check removed)
+M-L7  CAUGHT  fails=1  worker stops verifying the catalog and trusts the stored action
+
+every mutation caught
+# Evidence - governed lifecycle over HTTP (branch helpdesk/governed-lifecycle)
+
+## SUITE: node --test test/automation-http.test.js
+
+## SUITE: node --test test/lifecycle-toctou.test.js
+
+## MUTATION EVIDENCE: python3 scripts/tenant-mutation-evidence.py .

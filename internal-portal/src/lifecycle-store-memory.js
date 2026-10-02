@@ -21,7 +21,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const { assertTransition, STATES } = require('./action-catalog');
+const { assertTransition, STATES, proposalPayloadHash } = require('./action-catalog');
 
 function newId() {
   return crypto.randomUUID();
@@ -71,6 +71,9 @@ function createMemoryLifecycleStore(options = {}) {
           requestedByRole: row.requestedByRole,
           correlationId: row.correlationId,
           proposalSource: row.proposalSource || 'human',
+          // TOCTOU binding: written once here, re-verified before queue and
+          // execution. See action-catalog.proposalPayloadHash.
+          payloadHash: row.payloadHash || proposalPayloadHash(row),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -81,6 +84,14 @@ function createMemoryLifecycleStore(options = {}) {
 
     async getProposal(proposalId) {
       return state.proposals[proposalId] || null;
+    },
+
+    /**
+     * The approval recorded for a proposal, or null. Used by the TOCTOU gate to
+     * compare what was signed against what is about to run.
+     */
+    async getApproval(proposalId) {
+      return state.approvals[proposalId] || null;
     },
 
     async setState(proposalId, nextState) {
@@ -109,6 +120,9 @@ function createMemoryLifecycleStore(options = {}) {
           proposer: row.proposer,
           isSelfApproval: Boolean(row.isSelfApproval),
           reason: row.reason || '',
+          // What was actually signed, recorded independently of the proposal row
+          // as it stands now.
+          approvedPayloadHash: row.payloadHash || '',
           decidedAt: new Date().toISOString(),
         };
         state.approvals[row.proposalId] = approval;

@@ -24,6 +24,9 @@ const { createAgent } = require('./agent');
 const { createAuth, PERMISSIONS, normalizeTenant } = require('./auth');
 const { rowsVisibleTo, findVisible } = require('./tenant-scope');
 const { registerEnterpriseRoutes } = require('./enterprise-routes');
+const { createActionLifecycle } = require('./action-lifecycle');
+const { registerAutomationRoutes } = require('./automation-routes');
+const { createLifecycleStore, createAutomationExecutor } = require('./automation-runtime');
 
 // --- CORS allowlist -------------------------------------------------------------------
 /** Parse chuỗi origins: ',' phân cách → mảng; nếu '*' (hoặc rỗng) → cho phép mọi origin. */
@@ -171,6 +174,33 @@ async function createApp(options = {}) {
     return next();
   });
   registerEnterpriseRoutes({ app, store, auth, notifier, options });
+
+  // ------------------------- Governed automation lifecycle -------------------------
+  //
+  // The governed pipeline (proposal -> policy -> approval -> queue -> worker ->
+  // executor -> post-check) is reachable over HTTP for the first time here. The
+  // routes THIN: they validate shape, derive identity from the session, and hand
+  // the decision to `action-lifecycle.js`, which already owns risk, approval,
+  // idempotency and the TOCTOU gate. No handler executes anything.
+  //
+  // Store selection is explicit, never implicit:
+  //   * LIFECYCLE_PG_URL set  -> PostgreSQL (durable across replicas/restarts)
+  //   * otherwise             -> the file-backed memory store, which persists to
+  //                              `<dataDir>/action-lifecycle.json`
+  // Both are durable. The process-local map is only the `{}` in-memory variant,
+  // which this wiring deliberately does not use for a running server.
+  const lifecycleStore = options.lifecycleStore || await createLifecycleStore({ dataDir, options });
+  const automationLifecycle = createActionLifecycle({
+    store: lifecycleStore,
+    executor: createAutomationExecutor({ options }),
+  });
+  registerAutomationRoutes({
+    app,
+    auth,
+    lifecycle: automationLifecycle,
+    store: lifecycleStore,
+    queue: options.queue || null,
+  });
 
   // ------------------------------ Health -------------------
   app.get('/api/health', (req, res) => {
@@ -597,7 +627,16 @@ async function createApp(options = {}) {
     res.status(status).json(body);
   });
 
-  return { app, store, notifier, agent, dataDir, version: VERSION };
+  // `automationLifecycle` is exposed so tests (and an embedding worker) can drive
+  // the worker side of the boundary. It is the SAME object the routes use — a
+  // test cannot accidentally exercise a different, laxer lifecycle.
+  // `lifecycleStoreRef` exposes the durable store so a test can plant or tamper
+  // with a row the way a writer with database access could.
+  return {
+    app, store, notifier, agent,
+    automationLifecycle, lifecycleStoreRef: lifecycleStore,
+    dataDir, version: VERSION,
+  };
 }
 
 

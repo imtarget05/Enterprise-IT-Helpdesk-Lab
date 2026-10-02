@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 /**
  * Deterministic action catalog — the runtime policy for privileged automation.
  *
@@ -52,6 +54,42 @@ const RAW_COMMAND_FIELDS = Object.freeze([
 const ALLOWED_PROPOSAL_FIELDS = Object.freeze([
   'action', 'parameters', 'reason', 'ticketId', 'correlationId', 'source',
 ]);
+
+/**
+ * Canonical JSON: keys sorted at every depth, so two structurally equal
+ * payloads always serialise identically. Without this, `{a:1,b:2}` and
+ * `{b:2,a:1}` would hash differently and an approval could be invalidated by a
+ * key-order change alone.
+ */
+function canonicalize(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value === undefined ? null : value);
+  if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`;
+  const keys = Object.keys(value).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalize(value[k])}`).join(',')}}`;
+}
+
+/**
+ * Fingerprint of the part of a proposal an approver is actually approving:
+ * the action and its parameters. Reason/ticketId are descriptive, so changing
+ * them does not invalidate an approval; changing WHAT will run does.
+ *
+ * This is the TOCTOU binding. `decide()` records the hash with the approval and
+ * `enqueue()`/`execute()` re-verify it, so a proposal that is mutated between
+ * approval and execution is blocked instead of running something nobody
+ * signed off.
+ */
+function proposalPayloadHash(proposal) {
+  const material = canonicalize({
+    action: proposal && proposal.action,
+    parameters: (proposal && proposal.parameters) || {},
+  });
+  return crypto.createHash('sha256').update(material, 'utf8').digest('hex');
+}
+
+function payloadHashMatches(expected, proposal) {
+  if (typeof expected !== 'string' || !expected) return false;
+  return expected === proposalPayloadHash(proposal);
+}
 
 const STATES = Object.freeze({
   PROPOSED: 'PROPOSED',
@@ -173,4 +211,7 @@ module.exports = {
   validateProposal,
   assertTransition,
   isTerminal,
+  canonicalize,
+  proposalPayloadHash,
+  payloadHashMatches,
 };
