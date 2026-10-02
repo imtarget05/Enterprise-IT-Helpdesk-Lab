@@ -24,6 +24,15 @@ const { rolePermissions } = require('./auth');
 
 const { RISK, STATES } = catalog;
 
+/**
+ * Version of the queue message envelope.
+ *
+ * A consumer must be able to tell a v1 job from a v2 job and refuse the one it
+ * does not understand, instead of silently executing a message whose fields
+ * moved. Bump this whenever the envelope changes shape.
+ */
+const MESSAGE_SCHEMA_VERSION = 1;
+
 const DECISION = Object.freeze({
   ALLOWED: 'ALLOWED',
   NEEDS_APPROVAL: 'NEEDS_APPROVAL',
@@ -334,15 +343,24 @@ function createActionLifecycle(options = {}) {
 
     // The message carries identifiers only — never a command, never a parameter
     // the executor would trust blindly (parameters are re-read from the store).
+    //
+    // `schemaVersion` is mandatory: a consumer must be able to tell a v1 job from
+    // a v2 job and refuse the one it does not understand, rather than silently
+    // executing a message whose fields moved. `actionId` is carried for routing
+    // and observability ONLY — execute() re-reads the action from the store, so a
+    // tampered actionId here changes nothing.
     return {
       ok: true,
       status: STATES.QUEUED,
       message: {
+        schemaVersion: MESSAGE_SCHEMA_VERSION,
+        jobId: `job-${proposalId}`,
         actionId: proposal.action,
         proposalId,
         tenantId: proposal.tenantId,
         correlationId: proposal.correlationId,
         risk: proposal.risk,
+        payloadHash: proposal.payloadHash,
         idempotencyKey: idempotencyKeyFor(proposalId),
         attempt: 1,
         queuedAt: clock().toISOString(),
@@ -369,6 +387,26 @@ function createActionLifecycle(options = {}) {
     const base = {
       proposalId, tenantId: proposal.tenantId, correlationId: proposal.correlationId,
     };
+
+    // TENANT GATE. The envelope's tenant must AGREE with the persisted proposal's.
+    //
+    // Re-reading the tenant from the store (which is what the rest of this
+    // function does) is not on its own enough: a message that claims tenant-b
+    // while pointing at a tenant-a proposal would otherwise execute successfully
+    // under tenant-a's authority while the transport recorded tenant-b. That is a
+    // cross-tenant confusion — the job would be reported against the wrong tenant
+    // in audit, metrics and DLQ triage, and a corrupted or spoofed envelope could
+    // be laundered into another tenant's queue.
+    //
+    // Refusing on mismatch means a tampered envelope fails closed instead of
+    // silently "correcting itself".
+    if (message.tenantId && String(message.tenantId) !== String(proposal.tenantId)) {
+      await audit({
+        ...base, event: 'DENIED', actor: workerId,
+        detail: { stage: 'worker', reason: 'envelope tenant does not match the proposal tenant' },
+      });
+      return { ok: false, status: 'POISON', executed: false, code: 'TENANT_MISMATCH' };
+    }
 
     // TOCTOU GATE (2/2). The worker must NOT trust the queue message. A forged
     // or stale message is refused before the idempotency slot is claimed and
@@ -462,13 +500,25 @@ function createActionLifecycle(options = {}) {
       attempt, approvalId, approvalState,
     });
 
+    // The attempt number that the budget checks below must reflect the CURRENT
+    // attempt, which can be higher than `attempt` after a reclaim.
+    let effectiveAttempt = attempt;
+
     if (!claim.claimed) {
       const existing = await store.getExecutionByKey(idempotencyKey);
       const retryable = existing && existing.status === 'FAILED'
         && existing.result && existing.result.retryable === true;
       if (retryable && attempt <= maxAttempts && existing.attempt < maxAttempts) {
         const reclaimed = await store.reclaimExecution({ executionId: existing.executionId });
-        if (reclaimed.ok) claim = { claimed: true, duplicate: false, executionId: existing.executionId };
+        if (reclaimed.ok) {
+          claim = { claimed: true, duplicate: false, executionId: existing.executionId };
+          // Adopt the store's attempt counter. `attempt` still held the PREVIOUS
+          // attempt number here, so the `attempt >= maxAttempts` budget check
+          // further down compared against a stale value — a retried job was
+          // therefore told it had exhausted its budget one attempt early, and a
+          // genuinely retryable failure was reported as permanently dead.
+          effectiveAttempt = reclaimed.attempt;
+        }
       }
       if (!claim.claimed) {
         const status = existing && existing.status === 'CLAIMED' ? 'IN_FLIGHT' : 'DUPLICATE_BLOCKED';
@@ -512,7 +562,7 @@ function createActionLifecycle(options = {}) {
       });
     } catch (err) {
       const failure = classifyFailure(err);
-      const exhausted = !failure.retryable || attempt >= maxAttempts;
+      const exhausted = !failure.retryable || effectiveAttempt >= maxAttempts;
       const failStatus = exhausted && failure.retryable ? 'DEAD_LETTERED' : 'FAILED';
       await store.finishExecution({
         executionId: claim.executionId, status: failStatus,
@@ -588,6 +638,7 @@ function createActionLifecycle(options = {}) {
 module.exports = {
   createActionLifecycle,
   DECISION,
+  MESSAGE_SCHEMA_VERSION,
   classifyFailure,
   idempotencyKeyFor,
   isPostCheckVerified,

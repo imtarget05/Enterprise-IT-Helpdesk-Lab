@@ -27,6 +27,8 @@ const { registerEnterpriseRoutes } = require('./enterprise-routes');
 const { createActionLifecycle } = require('./action-lifecycle');
 const { registerAutomationRoutes } = require('./automation-routes');
 const { createLifecycleStore, createAutomationExecutor } = require('./automation-runtime');
+const { createDurableQueue } = require('./automation-queue');
+const { createAutomationWorker } = require('./automation-worker');
 
 // --- CORS allowlist -------------------------------------------------------------------
 /** Parse chuỗi origins: ',' phân cách → mảng; nếu '*' (hoặc rỗng) → cho phép mọi origin. */
@@ -194,12 +196,30 @@ async function createApp(options = {}) {
     store: lifecycleStore,
     executor: createAutomationExecutor({ options }),
   });
+
+  // The queue is durable by default: `<dataDir>/automation-queue`. Previously a
+  // request without an injected queue left every approved job in APPROVED with
+  // nothing pending, which made "approval does not execute" true but also
+  // "approval does not lead anywhere" — the pipeline dead-ended at the boundary.
+  // A file-backed queue makes the enqueue real and, crucially, survives the crash
+  // windows the worker tests exercise.
+  const automationQueue = options.queue || createDurableQueue({
+    dir: options.queueDir || path.join(dataDir, 'automation-queue'),
+    maxAttempts: options.queueMaxAttempts,
+  });
+  const automationWorker = createAutomationWorker({
+    lifecycle: automationLifecycle,
+    queue: automationQueue,
+    workerId: options.workerId || 'worker-1',
+    metrics: options.metrics,
+  });
+
   registerAutomationRoutes({
     app,
     auth,
     lifecycle: automationLifecycle,
     store: lifecycleStore,
-    queue: options.queue || null,
+    queue: automationQueue,
   });
 
   // ------------------------------ Health -------------------
@@ -635,6 +655,7 @@ async function createApp(options = {}) {
   return {
     app, store, notifier, agent,
     automationLifecycle, lifecycleStoreRef: lifecycleStore,
+    automationQueue, automationWorker,
     dataDir, version: VERSION,
   };
 }

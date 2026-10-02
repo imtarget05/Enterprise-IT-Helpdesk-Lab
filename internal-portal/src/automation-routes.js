@@ -168,8 +168,16 @@ function registerAutomationRoutes({ app, auth, lifecycle, queue, store }) {
         }
       }
 
+      // Read the proposal back AFTER the enqueue attempt. `result.proposal` is the
+      // row as it stood when the decision was recorded (APPROVED); publishing
+      // moves it to QUEUED. Returning the stale row made the response disagree
+      // with the store depending on which backend was in use — the file store
+      // happened to hand back a live object, so this only surfaced under
+      // PostgreSQL.
+      const finalProposal = queued ? await store.getProposal(proposalId) : result.proposal;
+
       return res.json({
-        ...publicView(result.proposal),
+        ...publicView(finalProposal || result.proposal),
         approval: result.approval,
         queued,
         ...(queueError ? { queueError } : {}),

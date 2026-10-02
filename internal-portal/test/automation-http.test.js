@@ -95,19 +95,25 @@ describe('CASE 2 — high risk parks at approval and executes only in the worker
       { reason: 'confirmed incident' }, approver,
     );
     assert.equal(approved.status, 200);
-    assert.equal(approved.data.state, 'APPROVED');
+    // The durable queue is now wired by default, so an approval really does
+    // enqueue. The state moves APPROVED -> QUEUED inside the same request.
+    // It still does NOT execute: `executorCalls` is asserted unchanged below.
+    assert.equal(approved.data.state, 'QUEUED');
+    assert.equal(approved.data.queued, true, 'an approval must reach the queue');
+    assert.ok(approved.data.proposalId);
 
     // STILL not executed: approval authorises, the worker performs.
     assert.equal(executorCalls.length, 0, 'approval must not execute over HTTP');
 
-    // And it is genuinely queueable now.
-    const lifecycle = client.context.automationLifecycle;
-    const enqueued = await lifecycle.enqueue({ proposalId: created.data.proposalId });
-    assert.equal(enqueued.ok, true, 'an approved proposal must be queueable');
+    // The job really is pending on the durable queue, not just marked as such.
+    const depth = await client.context.automationQueue.depth();
+    assert.ok(depth >= 1, 'the approved job is not pending on the queue');
 
-    const executed = await lifecycle.execute({
-      message: { proposalId: created.data.proposalId }, workerId: 'w-e2e',
-    });
+    // The worker performs it, and the executor is reached exactly once.
+    const processed = await client.context.automationWorker.runOnce();
+    assert.equal(processed.status, 'completed', `worker status was ${processed.status}`);
+
+    const executed = processed.result;
     assert.equal(executed.ok, true);
     assert.equal(executed.status, 'SUCCEEDED');
     assert.equal(executorCalls.length, 1, 'exactly one privileged execution');
@@ -298,7 +304,7 @@ describe('CASE 9 — a proposal edited after approval cannot be queued', () => {
     const approved = await client.json(
       'POST', `/api/automation/proposals/${created.data.proposalId}/approve`, {}, approver,
     );
-    assert.equal(approved.data.state, 'APPROVED');
+    assert.equal(approved.data.state, 'QUEUED', 'the approval enqueued the job');
 
     // Tamper with the stored row the way a writer with database access would.
     // The mechanism differs by backend: the memory store hands out live objects,
@@ -317,13 +323,20 @@ describe('CASE 9 — a proposal edited after approval cannot be queued', () => {
       row.parameters = { username: 'ceo.ceo' };
     }
 
-    const queued = await client.context.automationLifecycle.enqueue({ proposalId: created.data.proposalId });
-    assert.equal(queued.ok, false);
+    // The job is already QUEUED, so the enqueue gate has passed. The attack now is
+    // "tamper AFTER the queue accepted it, before the worker picks it up" — the
+    // realistic window. The worker's own re-check is what has to stop it.
+    const queued = await client.context.automationLifecycle.execute({
+      message: { proposalId: created.data.proposalId, jobId: `job-${created.data.proposalId}` },
+      workerId: 'w-toctou',
+    });
+    assert.equal(queued.ok, false, 'a tampered proposal must not execute');
+    assert.equal(queued.executed, false);
     assert.equal(queued.code, 'PAYLOAD_MODIFIED', `unexpected code ${queued.code}`);
     assert.equal(
-      (await store.getProposal(created.data.proposalId)).state,
-      'APPROVED',
-      'the tampered proposal must not have been queued',
+      executorCalls.filter((c) => c.parameters && c.parameters.username === 'ceo.ceo').length,
+      0,
+      'the tampered target was executed',
     );
   });
 });

@@ -413,12 +413,20 @@ describe('executor authority and audit integrity', () => {
     const { lifecycle } = build();
     const proposed = await proposeLowRisk(lifecycle);
     const { message } = await lifecycle.enqueue({ proposalId: proposed.proposalId });
+    // The envelope is identifiers + routing metadata only. `payloadHash` is included
+    // on purpose: it is a digest, so it tells the worker what to re-verify without
+    // telling it what to run. `schemaVersion` lets a consumer refuse a shape it
+    // does not understand. Neither is executable content.
     assert.deepEqual(Object.keys(message).sort(), [
-      'actionId', 'attempt', 'correlationId', 'idempotencyKey', 'proposalId', 'queuedAt', 'risk', 'tenantId',
+      'actionId', 'attempt', 'correlationId', 'idempotencyKey', 'jobId', 'payloadHash',
+      'proposalId', 'queuedAt', 'risk', 'schemaVersion', 'tenantId',
     ]);
     for (const field of catalog.RAW_COMMAND_FIELDS) {
       assert.equal(Object.prototype.hasOwnProperty.call(message, field), false);
     }
+    // Defence in depth: the parameters the executor will use are NOT in the
+    // message. The worker re-reads them from the durable store.
+    assert.equal(Object.prototype.hasOwnProperty.call(message, 'parameters'), false);
   });
 
   test('the audit trail covers the full lifecycle in order', async () => {
