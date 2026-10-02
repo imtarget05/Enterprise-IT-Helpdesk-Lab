@@ -70,6 +70,35 @@ function idempotencyKeyFor(proposalId) {
   return `act-${proposalId}`;
 }
 
+/**
+ * Is this outcome a verified success?
+ *
+ * The previous check was `outcome.postCheck !== false`, which treated an object
+ * like `{ verified: false, why: 'target still enabled' }` as a SUCCESS: only a
+ * literal `false` failed. A post-check that reports the state was NOT confirmed
+ * therefore produced SUCCEEDED — precisely the "exit code 0 is not proof"
+ * failure this stage exists to prevent. The defect was found by CASE 10 of the
+ * HTTP end-to-end suite, not by the unit tests, because every unit-test executor
+ * returned `{ verified: true }`.
+ *
+ * Accepted shapes, all explicit:
+ *   - absent / undefined -> trusted (nothing was asked to verify)
+ *   - `true`              -> verified
+ *   - `false`             -> NOT verified
+ *   - `{verified: true}`  -> verified
+ *   - `{verified: false}` -> NOT verified
+ *
+ * An object post-check carrying no boolean `verified` is treated as UNVERIFIED.
+ * Guessing "probably fine" is how a post-check becomes decoration.
+ */
+function isPostCheckVerified(outcome) {
+  const postCheck = outcome && outcome.postCheck;
+  if (postCheck === undefined || postCheck === null) return true;
+  if (typeof postCheck === 'boolean') return postCheck;
+  if (typeof postCheck !== 'object') return false;
+  return postCheck.verified === true;
+}
+
 function createActionLifecycle(options = {}) {
   if (!options.store) throw new Error('createActionLifecycle requires a store');
   const store = options.store;
@@ -228,6 +257,9 @@ function createActionLifecycle(options = {}) {
       proposer: proposal.requestedBy,
       isSelfApproval,
       reason: String(input.reason || ''),
+      // TOCTOU binding: the approver signs THIS payload, and the hash travels
+      // with the approval so queue and execution can re-verify it later.
+      payloadHash: proposal.payloadHash || catalog.proposalPayloadHash(proposal),
     });
     if (!recorded.ok) {
       return denied(recorded.code || 'APPROVAL_CONFLICT', 'a decision already exists for this proposal');
@@ -253,6 +285,31 @@ function createActionLifecycle(options = {}) {
     const proposalId = String(input.proposalId || '');
     const proposal = await store.getProposal(proposalId);
     if (!proposal) return denied('UNKNOWN_PROPOSAL', `unknown proposal ${proposalId}`);
+
+    // TOCTOU GATE (1/2). The payload must still hash to what it hashed to when
+    // the proposal was created — and, for a high-risk action, to what the
+    // approver signed. A proposal edited after approval is refused here, before
+    // any job exists, rather than executing something nobody signed off.
+    if (!catalog.payloadHashMatches(proposal.payloadHash, proposal)) {
+      await audit({
+        proposalId, tenantId: proposal.tenantId, correlationId: proposal.correlationId,
+        event: 'DENIED', actor: 'system',
+        detail: { stage: 'toctou', reason: 'proposal payload no longer matches its recorded hash' },
+      });
+      return denied('PAYLOAD_MODIFIED', 'proposal payload changed after it was recorded');
+    }
+    if (proposal.state === STATES.APPROVED) {
+      const approval = await store.getApproval(proposalId);
+      const signed = approval && approval.approvedPayloadHash;
+      if (signed && !catalog.payloadHashMatches(signed, proposal)) {
+        await audit({
+          proposalId, tenantId: proposal.tenantId, correlationId: proposal.correlationId,
+          event: 'DENIED', actor: 'system',
+          detail: { stage: 'toctou', reason: 'proposal payload no longer matches the approved hash' },
+        });
+        return denied('APPROVAL_PAYLOAD_MISMATCH', 'proposal changed after it was approved');
+      }
+    }
 
     try {
       await store.setState(proposalId, STATES.QUEUED);
@@ -312,6 +369,34 @@ function createActionLifecycle(options = {}) {
     const base = {
       proposalId, tenantId: proposal.tenantId, correlationId: proposal.correlationId,
     };
+
+    // TOCTOU GATE (2/2). The worker must NOT trust the queue message. A forged
+    // or stale message is refused before the idempotency slot is claimed and
+    // before the executor is reached:
+    //
+    //   · the action must still be in the catalog and hash to what was recorded;
+    //   · a HIGH_RISK action must carry an APPROVED, hash-matching approval.
+    //
+    // This is why "it came from the queue" is not treated as authority.
+    if (!catalog.isKnownAction(proposal.action)) {
+      await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'action is not in the catalog' } });
+      return { ok: false, status: 'POISON', executed: false, code: 'UNKNOWN_ACTION' };
+    }
+    if (!catalog.payloadHashMatches(proposal.payloadHash, proposal)) {
+      await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'payload no longer matches recorded hash' } });
+      return { ok: false, status: 'POISON', executed: false, code: 'PAYLOAD_MODIFIED' };
+    }
+    if (catalog.requiresApproval(proposal.action)) {
+      const approval = await store.getApproval(proposalId);
+      if (!approval || approval.decision !== 'APPROVED') {
+        await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'high-risk action delivered without an approved decision' } });
+        return { ok: false, status: 'POISON', executed: false, code: 'APPROVAL_REQUIRED' };
+      }
+      if (approval.approvedPayloadHash && !catalog.payloadHashMatches(approval.approvedPayloadHash, proposal)) {
+        await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'approved payload does not match what will run' } });
+        return { ok: false, status: 'POISON', executed: false, code: 'APPROVAL_PAYLOAD_MISMATCH' };
+      }
+    }
 
     const idempotencyKey = String(message.idempotencyKey || idempotencyKeyFor(proposalId));
 
@@ -445,7 +530,7 @@ function createActionLifecycle(options = {}) {
       };
     }
 
-    const postCheckOk = outcome ? outcome.postCheck !== false : true;
+    const postCheckOk = isPostCheckVerified(outcome);
     const status = postCheckOk
       ? (outcome && outcome.ok === false ? 'FAILED' : 'SUCCEEDED')
       : 'POSTCHECK_FAILED';
@@ -505,5 +590,6 @@ module.exports = {
   DECISION,
   classifyFailure,
   idempotencyKeyFor,
+  isPostCheckVerified,
   redact,
 };

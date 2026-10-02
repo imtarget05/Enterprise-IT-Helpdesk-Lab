@@ -228,7 +228,15 @@ describe('approval — append-only, separation of duties, durable', () => {
     await lifecycle.decide({ proposalId: proposed.proposalId, actor: APPROVER, decision: 'REJECTED' });
     assert.equal((await lifecycle.enqueue({ proposalId: proposed.proposalId })).code, 'NOT_QUEUEABLE');
     const executed = await lifecycle.execute({ message: { proposalId: proposed.proposalId }, workerId: 'w1' });
-    assert.equal(executed.code, 'WRONG_STATE');
+    // The worker's authority gate now refuses before the state machine, because a
+    // rejected high-risk action carries a REJECTED approval. That is a stronger
+    // refusal than WRONG_STATE: it names the missing authority instead of the
+    // state. Either way the executor must not be reached.
+    assert.ok(
+      ['WRONG_STATE', 'APPROVAL_REQUIRED'].includes(executed.code),
+      `unexpected code ${executed.code}`,
+    );
+    assert.equal(executed.executed, false);
     assert.equal(executor.calls.length, 0, 'no executor call may happen for a rejected action');
   });
 

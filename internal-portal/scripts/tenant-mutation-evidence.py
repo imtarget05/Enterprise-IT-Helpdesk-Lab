@@ -18,7 +18,12 @@ PORTAL = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
 SUITE = PORTAL / "test" / "tenant-isolation.test.js"
 # The agent-tool scoping (M7/M8) lives in a different suite; running both under
 # every mutation means a control is credited only when it actually bites.
-SUITES = [SUITE, PORTAL / "test" / "agent-runtime.test.js"]
+SUITES = [
+    SUITE,
+    PORTAL / "test" / "agent-runtime.test.js",
+    PORTAL / "test" / "lifecycle-toctou.test.js",
+    PORTAL / "test" / "action-lifecycle.test.js",
+]
 
 MUTATIONS = [
     (
@@ -76,6 +81,27 @@ MUTATIONS = [
         "src/agent/tools.js",
         "    const caller = ctx && ctx.user ? ctx : null;\n    const hit = findVisible(store.data.tickets || [], caller, id);",
         "    const hit = { found: true, row: store.find('tickets', id) };",
+    ),
+    (
+        "M-L4",
+        "enqueue's TOCTOU gate removed (a proposal edited after approval gets queued)",
+        "src/action-lifecycle.js",
+        "    if (!catalog.payloadHashMatches(proposal.payloadHash, proposal)) {\n      await audit({\n        proposalId, tenantId: proposal.tenantId, correlationId: proposal.correlationId,\n        event: 'DENIED', actor: 'system',\n        detail: { stage: 'toctou', reason: 'proposal payload no longer matches its recorded hash' },\n      });\n      return denied('PAYLOAD_MODIFIED', 'proposal payload changed after it was recorded');\n    }",
+        "",
+    ),
+    (
+        "M-L6",
+        "worker trusts an unapproved queue message (approval check removed)",
+        "src/action-lifecycle.js",
+        "    if (catalog.requiresApproval(proposal.action)) {\n      const approval = await store.getApproval(proposalId);\n      if (!approval || approval.decision !== 'APPROVED') {\n        await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'high-risk action delivered without an approved decision' } });\n        return { ok: false, status: 'POISON', executed: false, code: 'APPROVAL_REQUIRED' };\n      }",
+        "    if (false) {\n      const approval = await store.getApproval(proposalId);\n      if (!approval || approval.decision !== 'APPROVED') {\n        await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'high-risk action delivered without an approved decision' } });\n        return { ok: false, status: 'POISON', executed: false, code: 'APPROVAL_REQUIRED' };\n      }",
+    ),
+    (
+        "M-L7",
+        "worker stops verifying the catalog and trusts the stored action",
+        "src/action-lifecycle.js",
+        "    if (!catalog.isKnownAction(proposal.action)) {\n      await audit({ ...base, event: 'DENIED', actor: workerId, detail: { stage: 'worker', reason: 'action is not in the catalog' } });\n      return { ok: false, status: 'POISON', executed: false, code: 'UNKNOWN_ACTION' };\n    }",
+        "",
     ),
 ]
 
