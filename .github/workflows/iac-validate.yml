@@ -13,7 +13,11 @@ on:
 
 jobs:
   validate:
-    name: Compile, lint, test Bicep
+    # RE-ANCHORED FROM BICEP. The Bicep CLI install and the template compile
+    # steps are gone; validate.sh now gates Terraform (fmt, init -backend=false,
+    # validate root + modules, terraform test, plan-invariant controls, secret
+    # scan) and still runs the ARM invariant checker's traversal contracts.
+    name: Validate, test and negative-control the Terraform
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,12 +28,16 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Bicep CLI
-        run: |
-          curl -Lo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
-          chmod +x bicep
-          sudo mv bicep /usr/local/bin/bicep
-          bicep --version
+      # WHY setup-terraform and not a manual download: validate.sh refuses to
+      # report PASS without a CLI on PATH, so this step is the only thing
+      # standing between a runner and a silently-green job. Pinned exactly, and
+      # to the version the suite was measured on — see terraform-validate.yml
+      # for why 1.9.* produced a teardown failure nobody could reproduce.
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.3"
+          terraform_wrapper: false
 
       - name: Run validation harness
         run: bash infra/validate.sh

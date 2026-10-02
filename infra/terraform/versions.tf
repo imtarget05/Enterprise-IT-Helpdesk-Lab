@@ -1,8 +1,12 @@
 # =============================================================================
 #  Terraform — Enterprise IT Helpdesk Lab (canonical IaC as of Phase 1)
 #
-#  Bicep under ../* is FROZEN (parity source of truth only, see FROZEN control
-#  in scripts/check_bicep_frozen.py). Terraform is the only deployable path.
+#  Bicep has been DELETED from this repository. infra/terraform/ is now the only
+#  infrastructure source of truth, and the Bicep↔Terraform parity control and the
+#  Bicep freeze lock that used to police it are gone with it. That control was the
+#  only independent check that this port matched the stack it replaced; from here
+#  the guards are `terraform validate`, the `terraform test` contract assertions
+#  and the plan-invariant checks.
 #
 #  State is NOT local durable truth: Phase 2 adds the Azure Storage remote
 #  backend + GitHub OIDC. Until then `backend "local"` is the default and is
