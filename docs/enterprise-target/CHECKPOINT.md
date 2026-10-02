@@ -168,10 +168,106 @@ mutation, and a non-zero exit never counts as a catch without an assertion.
 - CI: ALL REPO-OWNED REQUIRED JOBS GREEN on every merged PR.
   SONARCLOUD: EXTERNAL_BLOCKER.
 
+## NEXT (superseded — see below)
+
+Wave C is now merged; see the Waves C and D section.
+
+---
+
+# Waves C and D merged
+
+## MAIN
+
+`f1b035c` — `feat(rag-eval): measure retrieval quality and gate regressions (#11)`
+PR #10 and PR #11 merged. No open PRs. Local feature branches removed.
+
+## Wave C — crash-window durability
+
+The queue-worker suite's header CLAIMED the four crash windows "cannot produce
+a duplicate privileged execution". It contained 18 tests and none were crash
+windows. Now they exist, measured by counting executor calls.
+
+A status assertion proves the worker returned something plausible; it does not
+prove the executor was not invoked. An implementation that executes and then
+throws `APPROVAL_REQUIRED` on the way out satisfies every status-based test in
+this repository while still performing the privileged effect.
+
+| Window | Crash point | Executor calls |
+|---|---|---|
+| W1 | after publish, before receive | 1 |
+| W2 | after receive, before ACK | 1 |
+| W3 | after execute, before durable completion | 1 |
+| W4 | after success recorded, before ACK | 1 |
+
+Two mutations initially SURVIVED, both informative:
+
+- Removing the pre-flight `getExecutionByKey` lookup changed nothing, because
+  the durable `claimExecution` still blocked the duplicate. That is defence in
+  depth working, not a weak test. M-C1 now removes the claim that actually
+  authorises the effect and the suite catches it.
+- Reporting a duplicate delivery as `ok: true` was undetected. Real gap: the
+  executor still ran once, so "no duplicate execution" held, but the blocked
+  delivery would have looked like a success to an operator and the DLQ would
+  have stayed empty. No duplicate execution is not the same as duplicate
+  VISIBLE. Two tests added, plus a `DUPLICATE_BLOCKED` audit assertion.
+
+## Wave D — RAG quality, measured
+
+RAG QUALITY is no longer `NOT_MEASURED`. Against the real corpus (284 chunks,
+36 documents, offline hash-TF, 28 answerable queries, K=5):
+
+| Metric | Value | Gated | Floor |
+|---|---|---|---|
+| Recall@5 | 0.8393 | yes | 0.75 |
+| MRR | 0.6333 | yes | 0.55 |
+| NDCG@5 | 0.6270 | yes | 0.50 |
+| Precision@5 | 0.2071 | **no** | — |
+| top-1 misses | 2 / 28 | yes | <= 15% |
+
+Precision is ungated on purpose: K=5 over 36 documents where most queries have
+one gold document bounds it near 0.2 by arithmetic. Gating a high value would
+be asserting the metric is wrong.
+
+Groundedness remains NOT MEASURED. It is a property of a GENERATED ANSWER, and
+the default path is an offline rule-based engine with no model in the loop.
+
+The most important defect found in Wave D: the quality gate initially scored a
+LOCALLY-WRITTEN cosine loop instead of calling `memorySearch`. M-Q1 made
+`memorySearch` return nothing and the gate stayed green. A quality suite
+pointed at a parallel implementation measures that implementation. The ranker
+now calls the production path and preserves its order.
+
+PRODUCTION PRIVATE CORPUS is still **NOT_VERIFIED** — every real corpus document
+is `__shared__`. Tenant denial was proven with controlled fixtures only.
+
+## Measured
+
+- Node: **569 tests, 562 pass, 7 skip, 0 fail**
+- llm-gateway: 71 passed, 4 xfailed
+- Crash-window mutation: **4/4 caught**
+- RAG mutation: **8/8 caught**
+- MCP mutation: **8/8 caught**
+- RAG quality mutation: **6/6 caught**
+- PostgreSQL 16 lifecycle: not re-measured. The local container fails with
+  ECONNRESET on connect due to its self-signed certificate, and it fails
+  IDENTICALLY with all changes stashed — an environment problem, not a
+  regression. Last green stands at 6/6 on commit `6024b3a`.
+- CI: ALL REPO-OWNED REQUIRED JOBS GREEN on every merged PR, including
+  SonarCloud Code Analysis on PRs #10 and #11.
+
+## Honest limitations carried forward
+
+- RAG quality is measured with the OFFLINE hash-TF backend. Two golden queries
+  score recall 0 because they are Vietnamese while the documents are largely
+  English, and hash-TF matches only shared latin tokens. Both golden entries
+  are correct; the limitation is recorded rather than hidden by rewriting the
+  queries until the number looked better.
+- Groundedness / faithfulness: NOT MEASURED, needs a generated answer set.
+- Production private corpus: NOT_VERIFIED.
+- Live Azure / Service Bus: NOT VERIFIED.
+
 ## NEXT
 
-Wave C — governed worker durability: crash-window tests for the four windows
-(before queue, after queue before ACK, after execute before durable completion,
-after success before ACK), duplicate-delivery handling, measured by counting
-executor calls rather than status codes. The durable queue is still file-backed;
-the Service Bus adapter follows the same interface.
+Wave E — agent guardrails, then observability, then Azure. The durable queue
+remains file-backed; a Service Bus adapter must preserve the code path these
+crash-window tests pin (receive-peek, execute, complete).
