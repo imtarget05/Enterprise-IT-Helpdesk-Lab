@@ -1,0 +1,308 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.3",
+  "planned_values": {
+    "root_module": {
+      "resources": [],
+      "outputs": {
+        "key_vault_name": { "sensitive": false, "value": "kv-helpdesklab" },
+        "key_vault_uri": { "sensitive": false, "value": "https://kv-helpdesklab.vault.azure.net/" },
+        "postgres_fqdn": { "sensitive": false, "value": "psql-helpdesk-lab.postgres.database.azure.com" },
+        "postgres_database_name": { "sensitive": false, "value": "helpdesk" },
+        "service_bus_queue_name": { "sensitive": false, "value": "helpdesk-automation-jobs" },
+        "service_bus_namespace": { "sensitive": false, "value": "sb-helpdesk-lab" },
+        "portal_fqdn": { "sensitive": false, "value": "ca-helpdesk-portal.wittysand-b748274c.eastasia.azurecontainerapps.io" },
+        "container_app_id": { "sensitive": false, "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-portfolio-evidence/providers/Microsoft.App/containerApps/ca-helpdesk-portal" },
+        "resource_group_name": { "sensitive": false, "value": "rg-portfolio-evidence" },
+        "aca_subnet_id": { "sensitive": false, "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-portfolio-evidence/providers/Microsoft.Network/virtualNetworks/vnet-helpdesk-lab/subnets/snet-aca" },
+        "log_analytics_workspace_id": { "sensitive": false, "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-portfolio-evidence/providers/Microsoft.OperationalInsights/workspaces/log-helpdesk-lab" },
+        "app_insights_id": { "sensitive": false, "value": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-portfolio-evidence/providers/Microsoft.Insights/components/appi-helpdesk-lab" }
+      },
+      "child_modules": []
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.keyvault.azurerm_key_vault.main",
+      "module_address": "module.keyvault",
+      "mode": "managed",
+      "type": "azurerm_key_vault",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "kv-helpdesklab",
+          "resource_group_name": "rg-portfolio-evidence",
+          "location": "southeastasia",
+          "sku_name": "standard",
+          "rbac_authorization_enabled": true,
+          "purge_protection_enabled": true,
+          "soft_delete_retention_days": 90,
+          "public_network_access_enabled": true,
+          "network_acls": [
+            { "bypass": "AzureServices", "default_action": "Allow" }
+          ],
+          "tags": { "env": "prod", "project": "helpdesk", "managedBy": "terraform" }
+        },
+        "after_unknown": { "id": true, "vault_uri": true },
+        "before_sensitive": null,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.database.azurerm_postgresql_flexible_server.main",
+      "module_address": "module.database",
+      "mode": "managed",
+      "type": "azurerm_postgresql_flexible_server",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "psql-helpdesk-lab",
+          "resource_group_name": "rg-portfolio-evidence",
+          "location": "southeastasia",
+          "version": "16",
+          "administrator_login": "helpdeskadmin",
+          "sku_name": "B_Standard_B1ms",
+          "storage_mb": 32768,
+          "auto_grow_enabled": true,
+          "backup_retention_days": 7,
+          "geo_redundant_backup_enabled": false,
+          "public_network_access_enabled": true
+        },
+        "after_unknown": { "id": true, "fqdn": true },
+        "before_sensitive": null,
+        "after_sensitive": { "administrator_password": true }
+      }
+    },
+    {
+      "address": "module.database.azurerm_postgresql_flexible_server_configuration.require_secure_transport",
+      "module_address": "module.database",
+      "mode": "managed",
+      "type": "azurerm_postgresql_flexible_server_configuration",
+      "name": "require_secure_transport",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "require_secure_transport",
+          "server_id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-portfolio-evidence/providers/Microsoft.DBforPostgreSQL/flexibleServers/psql-helpdesk-lab",
+          "value": "ON"
+        },
+        "after_unknown": { "id": true },
+        "before_sensitive": null,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.messaging.azurerm_servicebus_namespace.main",
+      "module_address": "module.messaging",
+      "mode": "managed",
+      "type": "azurerm_servicebus_namespace",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "sb-helpdesk-lab",
+          "resource_group_name": "rg-portfolio-evidence",
+          "location": "southeastasia",
+          "sku": "Standard",
+          "minimum_tls_version": "1.2",
+          "public_network_access_enabled": true,
+          "tags": { "env": "prod", "project": "helpdesk", "managedBy": "terraform" }
+        },
+        "after_unknown": { "id": true, "default_primary_key": true },
+        "before_sensitive": null,
+        "after_sensitive": { "default_primary_key": true }
+      }
+    },
+    {
+      "address": "module.messaging.azurerm_servicebus_queue.automation_jobs",
+      "module_address": "module.messaging",
+      "mode": "managed",
+      "type": "azurerm_servicebus_queue",
+      "name": "automation_jobs",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "helpdesk-automation-jobs",
+          "lock_duration": "PT5M",
+          "max_delivery_count": 10,
+          "dead_lettering_on_message_expiration": true,
+          "requires_duplicate_detection": true,
+          "duplicate_detection_history_time_window": "PT10M",
+          "batched_operations_enabled": true,
+          "namespace_id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-portfolio-evidence/providers/Microsoft.ServiceBus/namespaces/sb-helpdesk-lab"
+        },
+        "after_unknown": { "id": true },
+        "before_sensitive": null,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.observability.azurerm_log_analytics_workspace.main",
+      "module_address": "module.observability",
+      "mode": "managed",
+      "type": "azurerm_log_analytics_workspace",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "log-helpdesk-lab",
+          "resource_group_name": "rg-portfolio-evidence",
+          "location": "southeastasia",
+          "sku": "PerGB2018",
+          "retention_in_days": 30,
+          "allow_resource_only_permissions": true
+        },
+        "after_unknown": { "id": true, "primary_shared_key": true },
+        "before_sensitive": null,
+        "after_sensitive": { "primary_shared_key": true }
+      }
+    },
+    {
+      "address": "module.network.azurerm_virtual_network.main",
+      "module_address": "module.network",
+      "mode": "managed",
+      "type": "azurerm_virtual_network",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "vnet-helpdesk-lab",
+          "resource_group_name": "rg-portfolio-evidence",
+          "location": "southeastasia",
+          "address_space": ["10.10.0.0/16"],
+          "tags": { "env": "prod", "project": "helpdesk", "managedBy": "terraform" }
+        },
+        "after_unknown": { "id": true, "guid": true },
+        "before_sensitive": null,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.network.azurerm_subnet.aca",
+      "module_address": "module.network",
+      "mode": "managed",
+      "type": "azurerm_subnet",
+      "name": "aca",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "snet-aca",
+          "resource_group_name": "rg-portfolio-evidence",
+          "virtual_network_name": "vnet-helpdesk-lab",
+          "address_prefixes": ["10.10.2.0/23"],
+          "delegation": [
+            {
+              "name": "Microsoft.App.environments",
+              "service_delegation": [{ "name": "Microsoft.App/environments", "actions": [] }]
+            }
+          ]
+        },
+        "after_unknown": { "id": true },
+        "before_sensitive": null,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.apps.azurerm_container_app_environment.main",
+      "module_address": "module.apps",
+      "mode": "managed",
+      "type": "azurerm_container_app_environment",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "cae-helpdesk-lab",
+          "resource_group_name": "rg-portfolio-evidence",
+          "location": "southeastasia",
+          "internal_load_balancer_enabled": false,
+          "infrastructure_subnet_id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-portfolio-evidence/providers/Microsoft.Network/virtualNetworks/vnet-helpdesk-lab/subnets/snet-aca",
+          "workload_profile": [
+            { "name": "Consumption", "workload_profile_type": "Consumption" }
+          ]
+        },
+        "after_unknown": { "id": true, "default_domain": true },
+        "before_sensitive": null,
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "module.apps.azurerm_container_app.main",
+      "module_address": "module.apps",
+      "mode": "managed",
+      "type": "azurerm_container_app",
+      "name": "main",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "name": "ca-helpdesk-portal",
+          "resource_group_name": "rg-portfolio-evidence",
+          "location": "southeastasia",
+          "revision_mode": "Single",
+          "identity": [{ "type": "SystemAssigned" }],
+          "ingress": [
+            {
+              "external_enabled": true,
+              "target_port": 3000,
+              "transport": "auto",
+              "allow_insecure_connections": false,
+              "traffic_weight": [{ "latest_revision": true, "percentage": 100 }]
+            }
+          ],
+          "template": [
+            {
+              "min_replicas": 1,
+              "max_replicas": 3,
+              "container": [
+                {
+                  "name": "helpdesk-portal",
+                  "image": "ghcr.io/imtarget05/enterprise-it-helpdesk-lab-it-portal:main",
+                  "cpu": 0.5,
+                  "memory": "1.0Gi",
+                  "env": [
+                    { "name": "NODE_ENV", "value": "production" },
+                    { "name": "PORT", "value": "3000" },
+                    { "name": "KEY_VAULT_URI", "value": "https://kv-helpdesklab.vault.azure.net/" },
+                    { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "value": "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://eastasia-0.in.applicationinsights.azure.com/" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "after_unknown": { "id": true, "latest_revision_fqdn": true },
+        "before_sensitive": null,
+        "after_sensitive": {}
+      }
+    }
+  ],
+  "output_changes": {
+    "key_vault_uri": { "actions": ["create"], "before": null, "after": "https://kv-helpdesklab.vault.azure.net/", "after_unknown": false, "after_sensitive": false },
+    "portal_fqdn": { "actions": ["create"], "before": null, "after": "ca-helpdesk-portal.wittysand-b748274c.eastasia.azurecontainerapps.io", "after_unknown": false, "after_sensitive": false },
+    "postgres_fqdn": { "actions": ["create"], "before": null, "after": "psql-helpdesk-lab.postgres.database.azure.com", "after_unknown": false, "after_sensitive": false },
+    "service_bus_queue_name": { "actions": ["create"], "before": null, "after": "helpdesk-automation-jobs", "after_unknown": false, "after_sensitive": false }
+  }
+}
+
+

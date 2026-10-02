@@ -2,8 +2,8 @@
 
 ```text
 derived_from : docs/enterprise-target/CURRENT-STATE.md
-measured_at  : 2026-10-01
-blocker      : branch DIVERGENT from origin/main (+2 / -1) — reconcile before Phase 1
+measured_at  : 2026-10-02
+blocker      : none — branch RECONCILED (HEAD == origin/main 8401319b), Phase 0 measured
 ```
 
 ## Status vocabulary
@@ -28,7 +28,7 @@ No required row may be closed with `PARTIAL` / `PLANNED_ONLY` / `NOT_VERIFIED`.
 
 | # | Required component | Status (now) | Evidence measured | Close in |
 |---|---|---|---|---|
-| 1 | Terraform as canonical IaC | **NOT_PRESENT** | 0 `*.tf`; Bicep only | Phase 1 |
+| 1 | Terraform as canonical IaC | **IMPLEMENTED_TESTED** | `infra/terraform/` (ADR-0003); `terraform validate` + `terraform test` 13/13 green at a frozen, measured configuration; real read-only plan 13/13; `terraform-validate.yml` CI gate | Phase 1 |
 | 2 | Remote state + GitHub OIDC | **NOT_PRESENT** | no secretless deploy path measured | Phase 2 |
 | 3 | Import existing Azure resources (no recreate) | **UNMEASURED** | live inventory not probed | Phase 3 |
 | 4 | VNet + Private Endpoints + Private DNS | **UNMEASURED** | `infra/modules/network` | Phase 4 |

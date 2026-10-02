@@ -1,0 +1,16 @@
+{
+  "files": {
+    "infra/bicepconfig.json": "04b8e64111f821cbe7f6f914e8d7bbe13a0185424e513a10479b11caab4ad6c4",
+    "infra/main.bicep": "1d11032e8b14f839ef21f3caf88ca1910446c3efe07c68b05260baf1b7f3da02",
+    "infra/modules/apps/portal.bicep": "64b54968f90465d7658e3aef518be53ea609155e91dcf6048cbd8ac03294bdd8",
+    "infra/modules/database/postgres.bicep": "d43871b4832f2af17b0300e82a6bba982bbb31fed757d751862d6689294325f9",
+    "infra/modules/keyvault/main.bicep": "b8760a8576c6d065874559522ecc2ce2924a41c6fffd5f57eaaddf49b23a6c93",
+    "infra/modules/messaging/servicebus.bicep": "2a7f1f8114ade596cbb46a7d3e7c0e1a83743c8b83f58fe8b251561e5091cf47",
+    "infra/modules/network/vnet.bicep": "7c67af63638291edb8c7568e69700242d385d1f14a9598662136b53867a7ce45",
+    "infra/modules/observability/main.bicep": "71f4491c37e02f6d7f6d7c267f39e03b457420b6034c042311312d9afcf7adce",
+    "infra/parameters/dev.bicepparam": "ea3035b70283c23c53693a93299d2a0b4768957265721517eeddfe7640ce03a7",
+    "infra/parameters/prod.bicepparam": "4e9907cad8029b4cd7b0c2a1b4c382af8ecc2602c3d0a326ccc9792d94bf0128"
+  },
+  "root": "infra",
+  "rule": "Terraform under infra/terraform/ is the canonical IaC (Phase 1). These digests pin the Bicep parity source of truth; regenerate only with an explicit decision recorded in docs/adr/."
+}
